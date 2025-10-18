@@ -39,12 +39,14 @@ class _ExamplePageState extends State<ExamplePage> {
   final List<Float32List> generatorBuffer = [];
   bool _monitorMuted = false;
   double _monitorVolume = 1.0;
+  double _monitorPan = 0.0; // Add pan state
   bool _monitorEnabled = false;
   int totalRecordedFrames = 0;
   final List<Sound> sounds = [];
   late final Future<Sound> soundFuture;
   List<(String name, bool isDefault)> _playbackDevices = const [];
   int _selectedPlaybackIndex = 0;
+  double _generatorPan = 0.0; // Add generator pan state
 
   @override
   void initState() {
@@ -327,6 +329,33 @@ class _ExamplePageState extends State<ExamplePage> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Text("Generator Pan:"),
+                        SizedBox(
+                          width: 200,
+                          child: Slider(
+                            value: _generatorPan,
+                            min: -1.0,
+                            max: 1.0,
+                            divisions: 40,
+                            label: _generatorPan.toStringAsFixed(2),
+                            onChanged: (v) {
+                              setState(() => _generatorPan = v);
+                              if (generator.isInit) {
+                                generator.pan = v;
+                              }
+                            },
+                          ),
+                        ),
+                        Text(_generatorPan < 0
+                            ? 'L'
+                            : _generatorPan > 0
+                                ? 'R'
+                                : 'C'),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         const Text("Monitor volume"),
                         SizedBox(
                           width: 240,
@@ -357,6 +386,33 @@ class _ExamplePageState extends State<ExamplePage> {
                             } catch (_) {}
                           },
                         ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text("Monitor Pan:"),
+                        SizedBox(
+                          width: 200,
+                          child: Slider(
+                            value: _monitorPan,
+                            min: -1.0,
+                            max: 1.0,
+                            divisions: 40,
+                            label: _monitorPan.toStringAsFixed(2),
+                            onChanged: (v) {
+                              setState(() => _monitorPan = v);
+                              try {
+                                streamPlayer.pan = v;
+                              } catch (_) {}
+                            },
+                          ),
+                        ),
+                        Text(_monitorPan < 0
+                            ? 'L'
+                            : _monitorPan > 0
+                                ? 'R'
+                                : 'C'),
                       ],
                     ),
                   ],

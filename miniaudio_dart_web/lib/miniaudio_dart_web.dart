@@ -216,6 +216,18 @@ final class WebStreamPlayer implements PlatformStreamPlayer {
     } catch (_) {}
   }
 
+  double _pan = 0.0;
+  @override
+  double get pan => _pan;
+  @override
+  set pan(double v) {
+    final clamped = (v.isNaN ? 0.0 : v).clamp(-1.0, 1.0).toDouble();
+    _pan = clamped;
+    try {
+      wasm.stream_player_set_pan(_self, clamped);
+    } catch (_) {}
+  }
+
   @override
   void start() {
     final ok = wasm.stream_player_start(_self);
@@ -657,6 +669,16 @@ class WebGenerator implements PlatformGenerator {
   set volume(double value) {
     wasm.generator_set_volume(_self, value);
     _volume = value;
+  }
+
+  double _pan = 0.0;
+  @override
+  double get pan => _pan;
+  @override
+  set pan(double value) {
+    final clamped = value.clamp(-1.0, 1.0);
+    wasm.generator_set_pan(_self, clamped);
+    _pan = clamped;
   }
 
   @override

@@ -14,6 +14,10 @@ ma_device device;
 ma_device_config deviceConfig;
 ma_waveform_config sineWaveConfig;
 
+// Declare volume and pan before data_callback
+float volume = 0.5f;
+float pan = 0.0f;
+
 Generator *generator_create(void)
 {
     Generator *generator = (Generator *)malloc(sizeof(Generator));
@@ -59,6 +63,18 @@ void data_callback(ma_device *pDevice, void *pOutput, const void *pInput, ma_uin
     default:
         printf("Warning: Unknown generator type in data_callback.\n");
         break;
+    }
+
+    // Apply pan effect if stereo (2 channels)
+    if (generator->channels == 2 && pan != 0.0f) {
+        float* samples = (float*)pOutput;
+        float leftGain = (pan <= 0.0f) ? 1.0f : (1.0f - pan);
+        float rightGain = (pan >= 0.0f) ? 1.0f : (1.0f + pan);
+        
+        for (ma_uint32 i = 0; i < frameCount * 2; i += 2) {
+            samples[i] *= leftGain;      // Left channel
+            samples[i + 1] *= rightGain; // Right channel
+        }
     }
 
     circular_buffer_write(&generator->circular_buffer, pOutput, frameCount * generator->channels);
@@ -202,8 +218,6 @@ GeneratorResult generator_stop(Generator *generator)
     return GENERATOR_OK;
 }
 
-float volume = 0.5f;
-
 float generator_get_volume(Generator const *const self)
 {
     return volume;
@@ -218,6 +232,22 @@ void generator_set_volume(Generator *const self, float const value)
     }
     ma_device_set_master_volume(&device, value);
     volume = value;
+}
+
+float generator_get_pan(Generator const *const self)
+{
+    return pan;
+}
+
+void generator_set_pan(Generator *const self, float const value)
+{
+    if (value < -1.0f || value > 1.0f)
+    {
+        printf("Error: Invalid pan value in generator_set_pan. Pan: %f\n", value);
+        return;
+    }
+    // Note: ma_device doesn't have a direct pan control, but you can apply it in the callback
+    pan = value;
 }
 
 int generator_get_buffer(Generator *generator, float *output, int floats_to_read)

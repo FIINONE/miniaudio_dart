@@ -49,6 +49,8 @@ EXPORT int  stream_player_stop(StreamPlayer* sp);
 EXPORT void stream_player_clear(StreamPlayer* sp);
 EXPORT void  stream_player_set_volume(StreamPlayer* sp, float volume);
 EXPORT float stream_player_get_volume(StreamPlayer* sp);
+EXPORT void  stream_player_set_pan(StreamPlayer* sp, float pan);
+EXPORT float stream_player_get_pan(StreamPlayer* sp);
 
 EXPORT size_t stream_player_write_frames_f32(StreamPlayer* sp,
                                              const float* frames,

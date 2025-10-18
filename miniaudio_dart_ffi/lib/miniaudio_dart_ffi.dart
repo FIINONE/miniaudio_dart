@@ -473,6 +473,17 @@ final class FfiStreamPlayer implements PlatformStreamPlayer {
     bindings.stream_player_set_volume(_self, clamped);
   }
 
+  double _pan = 0.0;
+  @override
+  double get pan => _pan;
+
+  @override
+  set pan(double v) {
+    final clamped = v.isNaN ? 0.0 : v.clamp(-1.0, 1.0).toDouble();
+    _pan = clamped;
+    bindings.stream_player_set_pan(_self, clamped);
+  }
+
   @override
   void start() {
     final ok = bindings.stream_player_start(_self);
@@ -750,6 +761,16 @@ class FfiGenerator implements PlatformGenerator {
   set volume(double value) {
     bindings.generator_set_volume(_self, value);
     _volume = value;
+  }
+
+  double _pan = 0.0;
+  @override
+  double get pan => _pan;
+  @override
+  set pan(double value) {
+    final clamped = value.clamp(-1.0, 1.0);
+    bindings.generator_set_pan(_self, clamped);
+    _pan = clamped;
   }
 
   @override

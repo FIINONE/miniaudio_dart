@@ -333,7 +333,7 @@ final class CrossCoder {
     return _crossCoder.encodeFrames(frames);
   }
 
-  /// Encode PCM frames to compressed packet (backward compatibility)
+  /// Encode PCM frames to compressed packet
   Uint8List encodeFrames(Float32List frames) {
     final (packet, _) = encodeFramesWithSize(frames);
     return packet;
@@ -347,6 +347,7 @@ final class CrossCoder {
 
   /// Dispose resources
   void dispose() {
+    if (!_isInit) return;
     _crossCoder.dispose();
     _isInit = false;
   }
@@ -533,6 +534,9 @@ final class Generator {
   double get volume => _generator.volume;
   set volume(double value) => _generator.volume = value < 0 ? 0 : value;
 
+  double get pan => _generator.pan;
+  set pan(double value) => _generator.pan = value.clamp(-1.0, 1.0);
+
   final PlatformGenerator _generator;
   late Engine engine;
   bool isInit = false;
@@ -669,6 +673,12 @@ final class StreamPlayer {
     _player!.volume = v < 0 ? 0 : v;
   }
 
+  double get pan => _player?.pan ?? 0.0;
+  set pan(double v) {
+    if (_player == null) return;
+    _player!.pan = v.clamp(-1.0, 1.0);
+  }
+
   void start() {
     _ensureInit();
     _player!.start();
@@ -733,6 +743,7 @@ final class StreamPlayer {
     _format = other._format;
     _isStarted = other._isStarted;
     volume = other.volume;
+    pan = other.pan;
     // Dispose the donor's shell (avoid double free; donor should not be used).
     other._player = null;
   }

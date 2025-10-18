@@ -153,6 +153,8 @@ abstract interface class PlatformGenerator {
       MiniaudioDartPlatformInterface.instance.createGenerator();
   double get volume;
   set volume(double value);
+  double get pan;
+  set pan(double value);
   Future<void> init(
     int format,
     int channels,
@@ -188,6 +190,8 @@ abstract interface class PlatformCrossCoder {
 abstract interface class PlatformStreamPlayer {
   double get volume;
   set volume(double value);
+  double get pan;
+  set pan(double value);
   void start();
   void stop();
   void clear();

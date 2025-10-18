@@ -180,6 +180,20 @@ void main() {
       expect(gen.isInit, isTrue);
     });
 
+    test('volume roundtrip', () {
+      if (!ok) return;
+      gen.volume = 0.75;
+      expect(gen.volume, closeTo(0.75, 1e-6));
+    });
+
+    test('pan roundtrip', () {
+      if (!ok) return;
+      gen.pan = -0.5;
+      expect(gen.pan, closeTo(-0.5, 1e-6));
+      gen.pan = 0.8;
+      expect(gen.pan, closeTo(0.8, 1e-6));
+    });
+
     test('sine generation produces frames', () async {
       if (!ok) return;
       gen.setWaveform(WaveformType.sine, 440.0, 0.25);
@@ -237,6 +251,20 @@ void main() {
     test('init', () {
       if (!ready) return;
       expect(sp.isInit, isTrue);
+    });
+
+    test('volume roundtrip', () {
+      if (!ready) return;
+      sp.volume = 2.5;
+      expect(sp.volume, closeTo(2.5, 1e-6));
+    });
+
+    test('pan roundtrip', () {
+      if (!ready) return;
+      sp.pan = -0.7;
+      expect(sp.pan, closeTo(-0.7, 1e-6));
+      sp.pan = 0.3;
+      expect(sp.pan, closeTo(0.3, 1e-6));
     });
 
     test('start + write silence', () {

@@ -686,6 +686,17 @@ external void generator_set_volume(
   double value,
 );
 
+@ffi.Native<ffi.Float Function(ffi.Pointer<Generator>)>()
+external double generator_get_pan(
+  ffi.Pointer<Generator> self,
+);
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<Generator>, ffi.Float)>()
+external void generator_set_pan(
+  ffi.Pointer<Generator> self,
+  double value,
+);
+
 @ffi.Native<
     ffi.Int Function(ffi.Pointer<Generator>, ffi.Pointer<ffi.Float>, ffi.Int)>()
 external int generator_get_buffer(
@@ -807,6 +818,17 @@ external void stream_player_set_volume(
 
 @ffi.Native<ffi.Float Function(ffi.Pointer<StreamPlayer>)>()
 external double stream_player_get_volume(
+  ffi.Pointer<StreamPlayer> sp,
+);
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<StreamPlayer>, ffi.Float)>()
+external void stream_player_set_pan(
+  ffi.Pointer<StreamPlayer> sp,
+  double pan,
+);
+
+@ffi.Native<ffi.Float Function(ffi.Pointer<StreamPlayer>)>()
+external double stream_player_get_pan(
   ffi.Pointer<StreamPlayer> sp,
 );
 

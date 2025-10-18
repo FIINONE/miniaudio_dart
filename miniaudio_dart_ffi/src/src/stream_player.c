@@ -23,6 +23,7 @@ struct StreamPlayer {
     sp_data_source  ds;
     int             started;
     float           volume;
+    float           pan;  // Add this: -1.0 (left) to 1.0 (right)
     int             initialized;  // Add initialization flag
 
     CodecRuntime    codecRT;
@@ -146,6 +147,7 @@ int stream_player_init(StreamPlayer* sp,
     sp->sampleRate = (ma_uint32)cfg->sampleRate;
     sp->frameSizeBytes = (ma_uint32)(ma_get_bytes_per_sample(sp->format) * sp->channels);
     sp->volume     = 1.0f;
+    sp->pan        = 0.0f;  // Add this: centered by default
     sp->allowCodecPackets = cfg->allowCodecPackets ? 1 : 0;
 
     ma_uint64 capacityFrames = ((ma_uint64)cfg->bufferMilliseconds * sp->sampleRate) / 1000;
@@ -179,6 +181,7 @@ int stream_player_init(StreamPlayer* sp,
         return 0;
     }
     ma_sound_set_volume(&sp->sound, sp->volume);
+    ma_sound_set_pan(&sp->sound, sp->pan);  // Add this
 
     CodecConfig ccfg = {
         .sample_rate     = sp->sampleRate,
@@ -289,6 +292,19 @@ void stream_player_set_volume(StreamPlayer* sp, float volume) {
 
 float stream_player_get_volume(StreamPlayer* sp) {
     return sp ? sp->volume : 1.0f;
+}
+
+void stream_player_set_pan(StreamPlayer* sp, float pan) {
+    if(!sp) return;
+    // Clamp pan to -1.0 to 1.0
+    if(pan < -1.0f) pan = -1.0f;
+    if(pan > 1.0f) pan = 1.0f;
+    sp->pan = pan;
+    ma_sound_set_pan(&sp->sound, pan);
+}
+
+float stream_player_get_pan(StreamPlayer* sp) {
+    return sp ? sp->pan : 0.0f;
 }
 
 size_t stream_player_write_frames_f32(StreamPlayer* sp,

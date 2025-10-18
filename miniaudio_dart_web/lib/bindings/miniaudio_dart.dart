@@ -146,6 +146,10 @@ int stream_player_stop(int self) => _stream_player_stop(self);
 void stream_player_clear(int self) => _stream_player_clear(self);
 void stream_player_set_volume(int self, double volume) =>
     _stream_player_set_volume(self, volume);
+double stream_player_get_volume(int self) => _stream_player_get_volume(self);
+void stream_player_set_pan(int self, double pan) =>
+    _stream_player_set_pan(self, pan);
+double stream_player_get_pan(int self) => _stream_player_get_pan(self);
 int stream_player_write_frames_f32(int self, int data, int frames) =>
     _stream_player_write_frames_f32(self, data, frames);
 int stream_player_push_encoded_packet(int self, int data, int bytes) =>
@@ -183,6 +187,12 @@ external int _stream_player_stop(int self);
 external void _stream_player_clear(int self);
 @JS()
 external void _stream_player_set_volume(int self, double volume);
+@JS()
+external double _stream_player_get_volume(int self);
+@JS()
+external void _stream_player_set_pan(int self, double pan);
+@JS()
+external double _stream_player_get_pan(int self);
 @JS()
 external int _stream_player_write_frames_f32(int self, int data, int frames);
 @JS()
@@ -223,6 +233,8 @@ void generator_destroy(int self) => _generator_destroy(self);
 double generator_get_volume(int self) => _generator_get_volume(self);
 void generator_set_volume(int self, double volume) =>
     _generator_set_volume(self, volume);
+double generator_get_pan(int self) => _generator_get_pan(self);
+void generator_set_pan(int self, double pan) => _generator_set_pan(self, pan);
 int generator_get_available_frames(int self) =>
     _generator_get_available_frames(self);
 int generator_get_buffer(int self, int ptr, int frames) =>
@@ -264,6 +276,10 @@ external void _generator_destroy(int self);
 external double _generator_get_volume(int self);
 @JS()
 external void _generator_set_volume(int self, double volume);
+@JS()
+external double _generator_get_pan(int self);
+@JS()
+external void _generator_set_pan(int self, double pan);
 @JS()
 external int _generator_get_available_frames(int self);
 @JS()
