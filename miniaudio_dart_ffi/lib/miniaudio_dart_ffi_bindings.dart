@@ -842,6 +842,15 @@ external int stream_player_write_frames_f32(
 );
 
 @ffi.Native<
+    ffi.Size Function(
+        ffi.Pointer<StreamPlayer>, ffi.Pointer<ffi.Int16>, ffi.Size)>()
+external int stream_player_write_frames_s16(
+  ffi.Pointer<StreamPlayer> sp,
+  ffi.Pointer<ffi.Int16> frames,
+  int frameCount,
+);
+
+@ffi.Native<
     ffi.Int Function(
         ffi.Pointer<StreamPlayer>, ffi.Pointer<ffi.Void>, ffi.Int)>()
 external int stream_player_push_encoded_packet(
@@ -1363,8 +1372,18 @@ final class ma_log_callback extends ffi.Struct {
   external ffi.Pointer<ffi.Void> pUserData;
 }
 
-typedef ma_handle = ffi.Pointer<ffi.Void>;
-typedef ma_mutex = ma_handle;
+final class _opaque_pthread_mutex_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([56])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+typedef __darwin_pthread_mutex_t = _opaque_pthread_mutex_t;
+typedef pthread_mutex_t = __darwin_pthread_mutex_t;
+typedef ma_pthread_mutex_t = pthread_mutex_t;
+typedef ma_mutex = ma_pthread_mutex_t;
 
 final class ma_log extends ffi.Struct {
   @ffi.Array.multi([4])
@@ -1658,8 +1677,51 @@ final class ma_resource_manager_data_buffer_node extends ffi.Struct {
   external ffi.Pointer<ma_resource_manager_data_buffer_node> pChildHi;
 }
 
-typedef ma_thread = ma_handle;
-typedef ma_semaphore = ma_handle;
+final class __darwin_pthread_handler_rec extends ffi.Struct {
+  external ffi
+      .Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>
+      __routine;
+
+  external ffi.Pointer<ffi.Void> __arg;
+
+  external ffi.Pointer<__darwin_pthread_handler_rec> __next;
+}
+
+final class _opaque_pthread_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  external ffi.Pointer<__darwin_pthread_handler_rec> __cleanup_stack;
+
+  @ffi.Array.multi([8176])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+typedef __darwin_pthread_t = ffi.Pointer<_opaque_pthread_t>;
+typedef pthread_t = __darwin_pthread_t;
+typedef ma_pthread_t = pthread_t;
+typedef ma_thread = ma_pthread_t;
+
+final class _opaque_pthread_cond_t extends ffi.Struct {
+  @ffi.Long()
+  external int __sig;
+
+  @ffi.Array.multi([40])
+  external ffi.Array<ffi.Char> __opaque;
+}
+
+typedef __darwin_pthread_cond_t = _opaque_pthread_cond_t;
+typedef pthread_cond_t = __darwin_pthread_cond_t;
+typedef ma_pthread_cond_t = pthread_cond_t;
+
+final class ma_semaphore extends ffi.Struct {
+  @ffi.Int()
+  external int value;
+
+  external ma_pthread_mutex_t lock;
+
+  external ma_pthread_cond_t cond;
+}
 
 final class ma_slot_allocator_group extends ffi.Struct {
   @ma_uint32()
@@ -1718,7 +1780,15 @@ final class UnnamedStruct5 extends ffi.Struct {
 
 typedef ma_async_notification = ffi.Void;
 typedef Dartma_async_notification = void;
-typedef ma_event = ma_handle;
+
+final class ma_event extends ffi.Struct {
+  @ma_uint32()
+  external int value;
+
+  external ma_pthread_mutex_t lock;
+
+  external ma_pthread_cond_t cond;
+}
 
 final class ma_fence extends ffi.Struct {
   external ma_event e;
@@ -1925,6 +1995,7 @@ final class ma_job_queue extends ffi.Struct {
   external int _ownsHeap;
 }
 
+typedef ma_handle = ffi.Pointer<ffi.Void>;
 typedef ma_vfs_file = ma_handle;
 
 final class ma_file_info extends ffi.Struct {
@@ -2162,8 +2233,7 @@ enum ma_device_type {
       };
 }
 
-typedef ma_wchar_win32 = ffi.WChar;
-typedef Dartma_wchar_win32 = int;
+typedef ma_wchar_win32 = ma_uint16;
 typedef ma_int32 = ffi.Int;
 typedef Dartma_int32 = int;
 
@@ -3090,226 +3160,78 @@ enum ma_backend {
       };
 }
 
+typedef ma_procFunction = ffi.Void Function();
+typedef Dartma_procFunction = void Function();
+typedef ma_proc = ffi.Pointer<ffi.NativeFunction<ma_procFunction>>;
+typedef ma_ptr = ffi.Pointer<ffi.Void>;
+
+final class UnnamedStruct35 extends ffi.Struct {
+  external ma_handle hCoreFoundation;
+
+  external ma_proc CFStringGetCString;
+
+  external ma_proc CFRelease;
+
+  external ma_handle hCoreAudio;
+
+  external ma_proc AudioObjectGetPropertyData;
+
+  external ma_proc AudioObjectGetPropertyDataSize;
+
+  external ma_proc AudioObjectSetPropertyData;
+
+  external ma_proc AudioObjectAddPropertyListener;
+
+  external ma_proc AudioObjectRemovePropertyListener;
+
+  external ma_handle hAudioUnit;
+
+  external ma_proc AudioComponentFindNext;
+
+  external ma_proc AudioComponentInstanceDispose;
+
+  external ma_proc AudioComponentInstanceNew;
+
+  external ma_proc AudioOutputUnitStart;
+
+  external ma_proc AudioOutputUnitStop;
+
+  external ma_proc AudioUnitAddPropertyListener;
+
+  external ma_proc AudioUnitGetPropertyInfo;
+
+  external ma_proc AudioUnitGetProperty;
+
+  external ma_proc AudioUnitSetProperty;
+
+  external ma_proc AudioUnitInitialize;
+
+  external ma_proc AudioUnitRender;
+
+  external ma_ptr component;
+
+  @ma_bool32()
+  external int noAudioSessionDeactivate;
+}
+
 final class UnnamedStruct36 extends ffi.Struct {
   @ffi.Int()
   external int _unused;
 }
 
+final class UnnamedUnion9 extends ffi.Union {
+  external UnnamedStruct35 coreaudio;
+
+  external UnnamedStruct36 null_backend;
+}
+
 final class UnnamedStruct37 extends ffi.Struct {
-  @ffi.UnsignedInt()
-  external int deviceTypeAsInt;
-
-  ma_device_type get deviceType => ma_device_type.fromValue(deviceTypeAsInt);
-
-  external ffi.Pointer<ffi.Void> pAudioClient;
-
-  external ffi.Pointer<ffi.Pointer<ffi.Void>> ppAudioClientService;
-
-  external ffi.Pointer<ffi.Int> pResult;
-}
-
-final class UnnamedStruct38 extends ffi.Struct {
-  external ffi.Pointer<ma_device> pDevice;
-
-  @ffi.UnsignedInt()
-  external int deviceTypeAsInt;
-
-  ma_device_type get deviceType => ma_device_type.fromValue(deviceTypeAsInt);
-}
-
-final class UnnamedUnion10 extends ffi.Union {
-  external UnnamedStruct36 quit;
-
-  external UnnamedStruct37 createAudioClient;
-
-  external UnnamedStruct38 releaseAudioClient;
-}
-
-final class ma_context_command__wasapi extends ffi.Struct {
-  @ffi.Int()
-  external int code;
-
-  external ffi.Pointer<ma_event> pEvent;
-
-  external UnnamedUnion10 data;
-}
-
-typedef ma_proc = ffi.Pointer<ffi.Void>;
-
-final class UnnamedStruct35 extends ffi.Struct {
-  external ma_thread commandThread;
-
-  external ma_mutex commandLock;
-
-  external ma_semaphore commandSem;
-
-  @ma_uint32()
-  external int commandIndex;
-
-  @ma_uint32()
-  external int commandCount;
-
-  @ffi.Array.multi([4])
-  external ffi.Array<ma_context_command__wasapi> commands;
-
-  external ma_handle hAvrt;
-
-  external ma_proc AvSetMmThreadCharacteristicsA;
-
-  external ma_proc AvRevertMmThreadcharacteristics;
-
-  external ma_handle hMMDevapi;
-
-  external ma_proc ActivateAudioInterfaceAsync;
-}
-
-final class UnnamedStruct39 extends ffi.Struct {
-  external ma_handle hWnd;
-
-  external ma_handle hDSoundDLL;
-
-  external ma_proc DirectSoundCreate;
-
-  external ma_proc DirectSoundEnumerateA;
-
-  external ma_proc DirectSoundCaptureCreate;
-
-  external ma_proc DirectSoundCaptureEnumerateA;
-}
-
-final class UnnamedStruct40 extends ffi.Struct {
-  external ma_handle hWinMM;
-
-  external ma_proc waveOutGetNumDevs;
-
-  external ma_proc waveOutGetDevCapsA;
-
-  external ma_proc waveOutOpen;
-
-  external ma_proc waveOutClose;
-
-  external ma_proc waveOutPrepareHeader;
-
-  external ma_proc waveOutUnprepareHeader;
-
-  external ma_proc waveOutWrite;
-
-  external ma_proc waveOutReset;
-
-  external ma_proc waveInGetNumDevs;
-
-  external ma_proc waveInGetDevCapsA;
-
-  external ma_proc waveInOpen;
-
-  external ma_proc waveInClose;
-
-  external ma_proc waveInPrepareHeader;
-
-  external ma_proc waveInUnprepareHeader;
-
-  external ma_proc waveInAddBuffer;
-
-  external ma_proc waveInStart;
-
-  external ma_proc waveInReset;
-}
-
-final class UnnamedStruct41 extends ffi.Struct {
-  external ma_handle jackSO;
-
-  external ma_proc jack_client_open;
-
-  external ma_proc jack_client_close;
-
-  external ma_proc jack_client_name_size;
-
-  external ma_proc jack_set_process_callback;
-
-  external ma_proc jack_set_buffer_size_callback;
-
-  external ma_proc jack_on_shutdown;
-
-  external ma_proc jack_get_sample_rate;
-
-  external ma_proc jack_get_buffer_size;
-
-  external ma_proc jack_get_ports;
-
-  external ma_proc jack_activate;
-
-  external ma_proc jack_deactivate;
-
-  external ma_proc jack_connect;
-
-  external ma_proc jack_port_register;
-
-  external ma_proc jack_port_name;
-
-  external ma_proc jack_port_get_buffer;
-
-  external ma_proc jack_free;
-
-  external ffi.Pointer<ffi.Char> pClientName;
-
-  @ma_bool32()
-  external int tryStartServer;
-}
-
-final class UnnamedStruct42 extends ffi.Struct {
   @ffi.Int()
   external int _unused;
 }
 
-final class UnnamedUnion9 extends ffi.Union {
-  external UnnamedStruct35 wasapi;
-
-  external UnnamedStruct39 dsound;
-
-  external UnnamedStruct40 winmm;
-
-  external UnnamedStruct41 jack;
-
-  external UnnamedStruct42 null_backend;
-}
-
-final class UnnamedStruct43 extends ffi.Struct {
-  external ma_handle hOle32DLL;
-
-  external ma_proc CoInitialize;
-
-  external ma_proc CoInitializeEx;
-
-  external ma_proc CoUninitialize;
-
-  external ma_proc CoCreateInstance;
-
-  external ma_proc CoTaskMemFree;
-
-  external ma_proc PropVariantClear;
-
-  external ma_proc StringFromGUID2;
-
-  external ma_handle hUser32DLL;
-
-  external ma_proc GetForegroundWindow;
-
-  external ma_proc GetDesktopWindow;
-
-  external ma_handle hAdvapi32DLL;
-
-  external ma_proc RegOpenKeyExA;
-
-  external ma_proc RegCloseKey;
-
-  external ma_proc RegQueryValueExA;
-
-  @ffi.Long()
-  external int CoInitializeResult;
-}
-
-final class UnnamedUnion11 extends ffi.Union {
-  external UnnamedStruct43 win32;
+final class UnnamedUnion10 extends ffi.Union {
+  external UnnamedStruct37 posix;
 
   @ffi.Int()
   external int _unused;
@@ -3357,7 +3279,7 @@ final class ma_context extends ffi.Struct {
 
   external UnnamedUnion9 unnamed;
 
-  external UnnamedUnion11 unnamed$1;
+  external UnnamedUnion10 unnamed$1;
 }
 
 enum ma_device_state {
@@ -3444,12 +3366,12 @@ final class ma_duplex_rb extends ffi.Struct {
   external ma_pcm_rb rb;
 }
 
-final class UnnamedStruct45 extends ffi.Struct {
+final class UnnamedStruct39 extends ffi.Struct {
   @ma_uint32()
   external int lpfOrder;
 }
 
-final class UnnamedStruct44 extends ffi.Struct {
+final class UnnamedStruct38 extends ffi.Struct {
   @ffi.UnsignedInt()
   external int algorithmAsInt;
 
@@ -3460,7 +3382,7 @@ final class UnnamedStruct44 extends ffi.Struct {
 
   external ffi.Pointer<ffi.Void> pBackendUserData;
 
-  external UnnamedStruct45 linear;
+  external UnnamedStruct39 linear;
 }
 
 enum ma_dither_mode {
@@ -3527,7 +3449,7 @@ enum ma_channel_conversion_path {
       };
 }
 
-final class UnnamedUnion12 extends ffi.Union {
+final class UnnamedUnion11 extends ffi.Union {
   external ffi.Pointer<ffi.Pointer<ffi.Float>> f32;
 
   external ffi.Pointer<ffi.Pointer<ma_int32>> s16;
@@ -3563,7 +3485,7 @@ final class ma_channel_converter extends ffi.Struct {
 
   external ffi.Pointer<ma_uint8> pShuffleTable;
 
-  external UnnamedUnion12 weights;
+  external UnnamedUnion11 weights;
 
   external ffi.Pointer<ffi.Void> _pHeap;
 
@@ -3597,13 +3519,13 @@ final class ma_linear_resampler_config extends ffi.Struct {
 typedef ma_int16 = ffi.Short;
 typedef Dartma_int16 = int;
 
-final class UnnamedUnion14 extends ffi.Union {
+final class UnnamedUnion13 extends ffi.Union {
   external ffi.Pointer<ffi.Float> f32;
 
   external ffi.Pointer<ma_int16> s16;
 }
 
-final class UnnamedUnion15 extends ffi.Union {
+final class UnnamedUnion14 extends ffi.Union {
   external ffi.Pointer<ffi.Float> f32;
 
   external ffi.Pointer<ma_int16> s16;
@@ -3713,9 +3635,9 @@ final class ma_linear_resampler extends ffi.Struct {
   @ma_uint32()
   external int inTimeFrac;
 
-  external UnnamedUnion14 x0;
+  external UnnamedUnion13 x0;
 
-  external UnnamedUnion15 x1;
+  external UnnamedUnion14 x1;
 
   external ma_lpf lpf;
 
@@ -3725,7 +3647,7 @@ final class ma_linear_resampler extends ffi.Struct {
   external int _ownsHeap;
 }
 
-final class UnnamedUnion13 extends ffi.Union {
+final class UnnamedUnion12 extends ffi.Union {
   external ma_linear_resampler linear;
 }
 
@@ -3750,7 +3672,7 @@ final class ma_resampler extends ffi.Struct {
   @ma_uint32()
   external int sampleRateOut;
 
-  external UnnamedUnion13 state;
+  external UnnamedUnion12 state;
 
   external ffi.Pointer<ffi.Void> _pHeap;
 
@@ -3817,7 +3739,7 @@ final class ma_data_converter extends ffi.Struct {
   external ffi.Pointer<ffi.Void> _pHeap;
 }
 
-final class UnnamedStruct46 extends ffi.Struct {
+final class UnnamedStruct40 extends ffi.Struct {
   external ffi.Pointer<ma_device_id> pID;
 
   external ma_device_id id;
@@ -3892,7 +3814,7 @@ final class UnnamedStruct46 extends ffi.Struct {
   external int inputCacheRemaining;
 }
 
-final class UnnamedStruct47 extends ffi.Struct {
+final class UnnamedStruct41 extends ffi.Struct {
   external ffi.Pointer<ma_device_id> pID;
 
   external ma_device_id id;
@@ -3956,44 +3878,23 @@ final class UnnamedStruct47 extends ffi.Struct {
   external int intermediaryBufferLen;
 }
 
-typedef ma_ptr = ffi.Pointer<ffi.Void>;
-
-final class ma_IMMNotificationClient extends ffi.Struct {
-  external ffi.Pointer<ffi.Void> lpVtbl;
+final class UnnamedStruct42 extends ffi.Struct {
+  @ma_uint32()
+  external int deviceObjectIDPlayback;
 
   @ma_uint32()
-  external int counter;
+  external int deviceObjectIDCapture;
 
-  external ffi.Pointer<ma_device> pDevice;
-}
+  external ma_ptr audioUnitPlayback;
 
-final class ma_atomic_bool32 extends ffi.Struct {
-  @ma_bool32()
-  external int value;
-}
+  external ma_ptr audioUnitCapture;
 
-final class UnnamedStruct48 extends ffi.Struct {
-  external ma_ptr pAudioClientPlayback;
-
-  external ma_ptr pAudioClientCapture;
-
-  external ma_ptr pRenderClient;
-
-  external ma_ptr pCaptureClient;
-
-  external ma_ptr pDeviceEnumerator;
-
-  external ma_IMMNotificationClient notificationClient;
-
-  external ma_handle hEventPlayback;
-
-  external ma_handle hEventCapture;
+  external ma_ptr pAudioBufferList;
 
   @ma_uint32()
-  external int actualBufferSizeInFramesPlayback;
+  external int audioBufferCapInFrames;
 
-  @ma_uint32()
-  external int actualBufferSizeInFramesCapture;
+  external ma_event stopEvent;
 
   @ma_uint32()
   external int originalPeriodSizeInFrames;
@@ -4010,126 +3911,19 @@ final class UnnamedStruct48 extends ffi.Struct {
   ma_performance_profile get originalPerformanceProfile =>
       ma_performance_profile.fromValue(originalPerformanceProfileAsInt);
 
-  @ma_uint32()
-  external int periodSizeInFramesPlayback;
+  @ma_bool32()
+  external int isDefaultPlaybackDevice;
 
-  @ma_uint32()
-  external int periodSizeInFramesCapture;
+  @ma_bool32()
+  external int isDefaultCaptureDevice;
 
-  external ffi.Pointer<ffi.Void> pMappedBufferCapture;
+  @ma_bool32()
+  external int isSwitchingPlaybackDevice;
 
-  @ma_uint32()
-  external int mappedBufferCaptureCap;
+  @ma_bool32()
+  external int isSwitchingCaptureDevice;
 
-  @ma_uint32()
-  external int mappedBufferCaptureLen;
-
-  external ffi.Pointer<ffi.Void> pMappedBufferPlayback;
-
-  @ma_uint32()
-  external int mappedBufferPlaybackCap;
-
-  @ma_uint32()
-  external int mappedBufferPlaybackLen;
-
-  external ma_atomic_bool32 isStartedCapture;
-
-  external ma_atomic_bool32 isStartedPlayback;
-
-  @ma_uint32()
-  external int loopbackProcessID;
-
-  @ma_bool8()
-  external int loopbackProcessExclude;
-
-  @ma_bool8()
-  external int noAutoConvertSRC;
-
-  @ma_bool8()
-  external int noDefaultQualitySRC;
-
-  @ma_bool8()
-  external int noHardwareOffloading;
-
-  @ma_bool8()
-  external int allowCaptureAutoStreamRouting;
-
-  @ma_bool8()
-  external int allowPlaybackAutoStreamRouting;
-
-  @ma_bool8()
-  external int isDetachedPlayback;
-
-  @ma_bool8()
-  external int isDetachedCapture;
-
-  @ffi.UnsignedInt()
-  external int usageAsInt;
-
-  ma_wasapi_usage get usage => ma_wasapi_usage.fromValue(usageAsInt);
-
-  external ffi.Pointer<ffi.Void> hAvrtHandle;
-
-  external ma_mutex rerouteLock;
-}
-
-final class UnnamedStruct49 extends ffi.Struct {
-  external ma_ptr pPlayback;
-
-  external ma_ptr pPlaybackPrimaryBuffer;
-
-  external ma_ptr pPlaybackBuffer;
-
-  external ma_ptr pCapture;
-
-  external ma_ptr pCaptureBuffer;
-}
-
-final class UnnamedStruct50 extends ffi.Struct {
-  external ma_handle hDevicePlayback;
-
-  external ma_handle hDeviceCapture;
-
-  external ma_handle hEventPlayback;
-
-  external ma_handle hEventCapture;
-
-  @ma_uint32()
-  external int fragmentSizeInFrames;
-
-  @ma_uint32()
-  external int iNextHeaderPlayback;
-
-  @ma_uint32()
-  external int iNextHeaderCapture;
-
-  @ma_uint32()
-  external int headerFramesConsumedPlayback;
-
-  @ma_uint32()
-  external int headerFramesConsumedCapture;
-
-  external ffi.Pointer<ma_uint8> pWAVEHDRPlayback;
-
-  external ffi.Pointer<ma_uint8> pWAVEHDRCapture;
-
-  external ffi.Pointer<ma_uint8> pIntermediaryBufferPlayback;
-
-  external ffi.Pointer<ma_uint8> pIntermediaryBufferCapture;
-
-  external ffi.Pointer<ma_uint8> _pHeapData;
-}
-
-final class UnnamedStruct51 extends ffi.Struct {
-  external ma_ptr pClient;
-
-  external ffi.Pointer<ma_ptr> ppPortsPlayback;
-
-  external ffi.Pointer<ma_ptr> ppPortsCapture;
-
-  external ffi.Pointer<ffi.Float> pIntermediaryBufferPlayback;
-
-  external ffi.Pointer<ffi.Float> pIntermediaryBufferCapture;
+  external ffi.Pointer<ffi.Void> pNotificationHandler;
 }
 
 final class ma_timer extends ffi.Union {
@@ -4140,7 +3934,12 @@ final class ma_timer extends ffi.Union {
   external double counterD;
 }
 
-final class UnnamedStruct52 extends ffi.Struct {
+final class ma_atomic_bool32 extends ffi.Struct {
+  @ma_bool32()
+  external int value;
+}
+
+final class UnnamedStruct43 extends ffi.Struct {
   external ma_thread deviceThread;
 
   external ma_event operationEvent;
@@ -4177,16 +3976,10 @@ final class UnnamedStruct52 extends ffi.Struct {
   external ma_atomic_bool32 isStarted;
 }
 
-final class UnnamedUnion16 extends ffi.Union {
-  external UnnamedStruct48 wasapi;
+final class UnnamedUnion15 extends ffi.Union {
+  external UnnamedStruct42 coreaudio;
 
-  external UnnamedStruct49 dsound;
-
-  external UnnamedStruct50 winmm;
-
-  external UnnamedStruct51 jack;
-
-  external UnnamedStruct52 null_device;
+  external UnnamedStruct43 null_device;
 }
 
 final class ma_device extends ffi.Struct {
@@ -4244,13 +4037,13 @@ final class ma_device extends ffi.Struct {
 
   external ma_duplex_rb duplexRB;
 
-  external UnnamedStruct44 resampling;
+  external UnnamedStruct38 resampling;
 
-  external UnnamedStruct46 playback;
+  external UnnamedStruct40 playback;
 
-  external UnnamedStruct47 capture;
+  external UnnamedStruct41 capture;
 
-  external UnnamedUnion16 unnamed;
+  external UnnamedUnion15 unnamed;
 }
 
 enum ma_handedness {
@@ -4562,7 +4355,7 @@ final class ma_atomic_uint64 extends ffi.Struct {
   external int value;
 }
 
-final class UnnamedStruct53 extends ffi.Struct {
+final class UnnamedStruct44 extends ffi.Struct {
   external ma_atomic_float volumeBeg;
 
   external ma_atomic_float volumeEnd;
@@ -4619,7 +4412,7 @@ final class ma_engine_node extends ffi.Struct {
   @ma_uint32()
   external int pinnedListenerIndex;
 
-  external UnnamedStruct53 fadeSettings;
+  external UnnamedStruct44 fadeSettings;
 
   @ma_bool8()
   external int _ownsHeap;
@@ -4662,13 +4455,13 @@ typedef Dartma_decoder_tell_procFunction = ma_result Function(
 typedef ma_decoder_tell_proc
     = ffi.Pointer<ffi.NativeFunction<ma_decoder_tell_procFunction>>;
 
-final class UnnamedStruct54 extends ffi.Struct {
+final class UnnamedStruct45 extends ffi.Struct {
   external ffi.Pointer<ma_vfs> pVFS;
 
   external ma_vfs_file file;
 }
 
-final class UnnamedStruct55 extends ffi.Struct {
+final class UnnamedStruct46 extends ffi.Struct {
   external ffi.Pointer<ma_uint8> pData;
 
   @ffi.Size()
@@ -4678,10 +4471,10 @@ final class UnnamedStruct55 extends ffi.Struct {
   external int currentReadPos;
 }
 
-final class UnnamedUnion19 extends ffi.Union {
-  external UnnamedStruct54 vfs;
+final class UnnamedUnion18 extends ffi.Union {
+  external UnnamedStruct45 vfs;
 
-  external UnnamedStruct55 memory;
+  external UnnamedStruct46 memory;
 }
 
 final class ma_decoder extends ffi.Struct {
@@ -4730,7 +4523,7 @@ final class ma_decoder extends ffi.Struct {
 
   external ma_allocation_callbacks allocationCallbacks;
 
-  external UnnamedUnion19 data;
+  external UnnamedUnion18 data;
 }
 
 final class ma_audio_buffer_ref extends ffi.Struct {
@@ -4782,7 +4575,7 @@ final class ma_paged_audio_buffer extends ffi.Struct {
   external int absoluteCursor;
 }
 
-final class UnnamedUnion18 extends ffi.Union {
+final class UnnamedUnion17 extends ffi.Union {
   external ma_decoder decoder;
 
   external ma_audio_buffer buffer;
@@ -4822,7 +4615,7 @@ final class ma_resource_manager_data_buffer extends ffi.Struct {
 
   external ma_atomic_bool32 isConnectorInitialized;
 
-  external UnnamedUnion18 connector;
+  external UnnamedUnion17 connector;
 }
 
 final class ma_resource_manager_data_stream extends ffi.Struct {
@@ -4879,14 +4672,14 @@ final class ma_resource_manager_data_stream extends ffi.Struct {
   external int seekCounter;
 }
 
-final class UnnamedUnion17 extends ffi.Union {
+final class UnnamedUnion16 extends ffi.Union {
   external ma_resource_manager_data_buffer buffer;
 
   external ma_resource_manager_data_stream stream;
 }
 
 final class ma_resource_manager_data_source extends ffi.Struct {
-  external UnnamedUnion17 backend;
+  external UnnamedUnion16 backend;
 
   @ma_uint32()
   external int flags;

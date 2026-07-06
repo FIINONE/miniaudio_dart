@@ -56,6 +56,10 @@ EXPORT size_t stream_player_write_frames_f32(StreamPlayer* sp,
                                              const float* frames,
                                              size_t frameCount);
 
+EXPORT size_t stream_player_write_frames_s16(StreamPlayer* sp,
+                                             const int16_t* frames,
+                                             size_t frameCount);
+
 EXPORT int stream_player_push_encoded_packet(StreamPlayer* sp,
                                              const void* packet,
                                              int packetBytes);

@@ -650,8 +650,10 @@ final class StreamPlayer {
       await engine.init();
       await engine.start();
     }
-    if (format != AudioFormat.float32) {
-      throw Exception("Only AudioFormat.float32 is supported by StreamPlayer");
+    if (format != AudioFormat.float32 && format != AudioFormat.int16) {
+      throw Exception(
+        'Only AudioFormat.float32 and AudioFormat.int16 are supported by StreamPlayer',
+      );
     }
     _channels = channels;
     _sampleRate = sampleRate;
@@ -705,6 +707,13 @@ final class StreamPlayer {
     _ensureInit();
     if (interleaved.isEmpty) return 0;
     return _player!.writeFloat32(interleaved);
+  }
+
+  /// Write raw PCM Int16 data
+  int writeInt16(Int16List interleaved) {
+    _ensureInit();
+    if (interleaved.isEmpty) return 0;
+    return _player!.writeInt16(interleaved);
   }
 
   /// Push any data - auto-detects PCM vs encoded and handles appropriately

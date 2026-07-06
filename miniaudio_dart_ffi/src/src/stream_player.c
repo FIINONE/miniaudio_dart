@@ -186,7 +186,7 @@ int stream_player_init(StreamPlayer* sp,
     CodecConfig ccfg = {
         .sample_rate     = sp->sampleRate,
         .channels        = sp->channels,
-        .bits_per_sample = 32
+        .bits_per_sample = (sp->format == ma_format_s16) ? 16 : 32,
     };
     if(codec_runtime_init(&sp->codecRT, CODEC_ID_PCM, &ccfg)) {
         sp->codecInitialized = 1;
@@ -307,26 +307,59 @@ float stream_player_get_pan(StreamPlayer* sp) {
     return sp ? sp->pan : 0.0f;
 }
 
+static size_t stream_player_write_frames(StreamPlayer* sp,
+                                         const void* frames,
+                                         size_t frameCount)
+{
+    if (!sp || !frames || frameCount == 0) return 0;
+    size_t written = 0;
+
+    while (written < frameCount) {
+        ma_uint32 space = ma_pcm_rb_available_write(&sp->rb);
+        if (space == 0) break;
+
+        ma_uint32 req = (ma_uint32)((frameCount - written) < space
+                                        ? (frameCount - written)
+                                        : space);
+
+        void* pWrite = NULL;
+
+        if (ma_pcm_rb_acquire_write(&sp->rb, &req, &pWrite) != MA_SUCCESS || req == 0) break;
+
+        const uint8_t* src = (const uint8_t*)frames;
+        memcpy(
+            pWrite,
+            src + written * sp->frameSizeBytes,
+            (size_t)req * sp->frameSizeBytes);
+
+        ma_pcm_rb_commit_write(&sp->rb, req);
+
+        written += req;
+    }
+
+    return written;
+}
+
 size_t stream_player_write_frames_f32(StreamPlayer* sp,
                                       const float* frames,
                                       size_t frameCount)
 {
-    if(!sp || !frames || frameCount==0) return 0;
-    size_t written = 0;
-    while(written < frameCount) {
-        ma_uint32 space = ma_pcm_rb_available_write(&sp->rb);
-        if(space == 0) break;
-        ma_uint32 req = (ma_uint32)((frameCount - written) < space ?
-                                     (frameCount - written) : space);
-        void* pWrite = NULL;
-        if(ma_pcm_rb_acquire_write(&sp->rb, &req, &pWrite) != MA_SUCCESS || req==0) break;
-        memcpy(pWrite,
-               frames + written * sp->channels,
-               (size_t)req * sp->channels * sizeof(float));
-        ma_pcm_rb_commit_write(&sp->rb, req);
-        written += req;
+    if (sp == NULL || sp->format != ma_format_f32) {
+        return 0;
     }
-    return written;
+
+    return stream_player_write_frames(sp, frames, frameCount);
+}
+
+size_t stream_player_write_frames_s16(StreamPlayer* sp,
+                                      const int16_t* frames,
+                                      size_t frameCount)
+{
+    if (sp == NULL || sp->format != ma_format_s16) {
+        return 0;
+    }
+
+    return stream_player_write_frames(sp, frames, frameCount);
 }
 
 int stream_player_push_encoded_packet(StreamPlayer* sp,

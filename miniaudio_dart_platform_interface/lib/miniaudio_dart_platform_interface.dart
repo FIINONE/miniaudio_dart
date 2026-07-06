@@ -199,6 +199,9 @@ abstract interface class PlatformStreamPlayer {
   // Write interleaved Float32 samples; returns frames written.
   int writeFloat32(Float32List interleaved);
 
+  // Write interleaved Int16 samples; returns frames written.
+  int writeInt16(Int16List samples);
+
   // Unified push method - auto-detects and handles any codec
   bool pushData(
       dynamic data); // Can be Float32List (PCM) or Uint8List (encoded)

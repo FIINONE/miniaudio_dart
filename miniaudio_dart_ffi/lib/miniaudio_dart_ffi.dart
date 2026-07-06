@@ -462,6 +462,9 @@ final class FfiStreamPlayer implements PlatformStreamPlayer {
   Pointer<Float> _scratch = nullptr;
   int _scratchFloats = 0;
 
+  Pointer<Int16> _scratchS16 = nullptr;
+  int _scratchS16Samples = 0;
+
   double _volume = 1.0;
   @override
   double get volume => _volume;
@@ -533,9 +536,43 @@ final class FfiStreamPlayer implements PlatformStreamPlayer {
   }
 
   @override
+  int writeInt16(Int16List interleaved) {
+    if (interleaved.isEmpty) return 0;
+
+    final int samples = interleaved.length;
+
+    if (samples % _channels != 0) {
+      throw MiniaudioDartPlatformException(
+        "writeInt16: samples ($samples) not divisible by channels ($_channels)",
+      );
+    }
+
+    final int frames = samples ~/ _channels;
+
+    if (_scratchS16 == nullptr || _scratchS16Samples < samples) {
+      if (_scratchS16 != nullptr) {
+        calloc.free(_scratchS16);
+      }
+
+      _scratchS16 = calloc<Int16>(samples);
+      _scratchS16Samples = samples;
+    }
+
+    _scratchS16.asTypedList(samples).setAll(0, interleaved);
+
+    return bindings.stream_player_write_frames_s16(
+      _self,
+      _scratchS16,
+      frames,
+    );
+  }
+
+  @override
   bool pushData(dynamic data) {
     if (data is Float32List) {
       return writeFloat32(data) > 0;
+    } else if (data is Int16List) {
+      return writeInt16(data) > 0;
     } else if (data is Uint8List) {
       return pushEncodedPacket(data);
     }
@@ -562,6 +599,11 @@ final class FfiStreamPlayer implements PlatformStreamPlayer {
       calloc.free(_scratch);
       _scratch = nullptr;
       _scratchFloats = 0;
+    }
+    if (_scratchS16 != nullptr) {
+      calloc.free(_scratchS16);
+      _scratchS16 = nullptr;
+      _scratchS16Samples = 0;
     }
     bindings.stream_player_free(_self);
   }

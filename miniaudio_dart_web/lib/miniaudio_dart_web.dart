@@ -278,9 +278,26 @@ final class WebStreamPlayer implements PlatformStreamPlayer {
   }
 
   @override
+  int writeInt16(Int16List interleaved) {
+    if (interleaved.isEmpty) return 0;
+
+    // Пока Web не поддерживает native s16.
+    // Просто конвертируем во Float32.
+    final out = Float32List(interleaved.length);
+
+    for (var i = 0; i < interleaved.length; i++) {
+      out[i] = interleaved[i] / 32768.0;
+    }
+
+    return writeFloat32(out);
+  }
+
+  @override
   bool pushData(dynamic data) {
     if (data is Float32List) {
       return writeFloat32(data) > 0;
+    } else if (data is Int16List) {
+      return writeInt16(data) > 0;
     } else if (data is Uint8List) {
       return pushEncodedPacket(data);
     }
