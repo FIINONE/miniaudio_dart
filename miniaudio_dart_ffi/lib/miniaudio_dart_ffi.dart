@@ -249,6 +249,7 @@ class FfiRecorder implements PlatformRecorder {
 
   final Pointer<bindings.Recorder> _self;
   int _channels = 0;
+  int _format = 0;
   RecorderCodecConfig? _codecConfig;
 
   @override
@@ -287,6 +288,7 @@ class FfiRecorder implements PlatformRecorder {
       }
 
       _channels = channels;
+      _format = format;
       _codecConfig = codecConfig;
     } finally {
       calloc.free(cfgPtr);
@@ -321,8 +323,20 @@ class FfiRecorder implements PlatformRecorder {
 
   @override
   dynamic readChunk({int maxFrames = 512}) {
+    dynamic emptyPcm() {
+      switch (_format) {
+        case AudioFormat.int16:
+          return Int16List(0);
+        case AudioFormat.uint8:
+          return Uint8List(0);
+        case AudioFormat.float32:
+        default:
+          return Float32List(0);
+      }
+    }
+
     if (_channels == 0)
-      return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
+      return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
 
     final ptrOut = calloc<Pointer<Void>>();
     final framesOut = calloc<Int>();
@@ -330,23 +344,46 @@ class FfiRecorder implements PlatformRecorder {
       final ok =
           bindings.recorder_acquire_read_region(_self, ptrOut, framesOut);
       if (ok == 0)
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
+        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
 
       final available = framesOut.value;
       if (available <= 0)
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
+        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
 
       final use = available > maxFrames ? maxFrames : available;
       final dataPtr = ptrOut.value;
       if (dataPtr == nullptr)
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
+        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
 
       dynamic result;
       if (codec == RecorderCodec.pcm) {
-        // PCM data - return as Float32List
-        final floatPtr = dataPtr.cast<Float>();
-        final floats = use * _channels;
-        result = Float32List.fromList(floatPtr.asTypedList(floats));
+        switch (_format) {
+          case AudioFormat.float32:
+            final ptr = dataPtr.cast<Float>();
+            result = Float32List.fromList(
+              ptr.asTypedList(use * _channels),
+            );
+            break;
+
+          case AudioFormat.int16:
+            final ptr = dataPtr.cast<Int16>();
+            result = Int16List.fromList(
+              ptr.asTypedList(use * _channels),
+            );
+            break;
+
+          case AudioFormat.uint8:
+            final ptr = dataPtr.cast<Uint8>();
+            result = Uint8List.fromList(
+              ptr.asTypedList(use * _channels),
+            );
+            break;
+
+          default:
+            throw UnsupportedError(
+              "Unsupported PCM format: $_format",
+            );
+        }
       } else {
         // Encoded data - return as Uint8List
         final bytePtr = dataPtr.cast<Uint8>();

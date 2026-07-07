@@ -420,11 +420,24 @@ final class Recorder {
     if (!isInit || !isRecording) {
       throw StateError("Recorder is not initialized or not recording");
     }
+
+    dynamic emptyPcm() {
+      switch (format) {
+        case AudioFormat.int16:
+          return Int16List(0);
+        case AudioFormat.uint8:
+          return Uint8List(0);
+        case AudioFormat.float32:
+        default:
+          return Float32List(0);
+      }
+    }
+
     final interval = Duration(milliseconds: intervalMs);
     return Stream.periodic(interval, (_) {
       final framesAvail = getAvailableFrames();
       if (framesAvail <= 0) {
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
+        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
       }
       final limit = maxFramesPerChunk > 0 ? maxFramesPerChunk : framesAvail;
       return readChunk(maxFrames: limit);
