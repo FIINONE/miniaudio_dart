@@ -366,6 +366,7 @@ final class Recorder {
   RecorderCodecConfig? _codecConfig;
   bool isInit = false;
   bool isRecording = false;
+  bool isDisposed = false;
 
   /// Initializes the recorder for streaming with optional codec configuration.
   Future<void> initStream({
@@ -494,6 +495,7 @@ final class Recorder {
 
   /// Disposes of the recorder resources.
   void dispose() {
+    isDisposed = true;
     _recorder.dispose();
   }
 
@@ -524,8 +526,9 @@ final class Recorder {
     Duration interval = const Duration(seconds: 1),
   }) async* {
     var lastGen = -1;
-    while (true) {
+    while (!isDisposed) {
       await Future.delayed(interval);
+      if (isDisposed) continue;
       if (!isInit) continue;
       final gen = _recorder.getCaptureDeviceGeneration();
       if (gen != lastGen) {
