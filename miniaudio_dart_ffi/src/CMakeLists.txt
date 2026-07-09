@@ -20,6 +20,7 @@ set(MAIN_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/engine.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/generator.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/record.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/converter.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/silence_data_source.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/sound.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/stream_player.c"

@@ -541,6 +541,69 @@ final class Recorder {
   }
 }
 
+
+final class Converter {
+  Converter() : _converter = MiniaudioDartPlatformInterface.instance.createConverter();
+
+  final PlatformConverter _converter;
+
+  bool isInit = false;
+
+  late int inputSampleRate;
+  late int outputSampleRate;
+  late int channels;
+  late int format;
+
+  Future<void> init({
+    int inputSampleRate = 16000,
+    int outputSampleRate = 24000,
+    int channels = 1,
+    int format = AudioFormat.int16,
+  }) async {
+    if (isInit) return;
+
+    if (inputSampleRate <= 0 ||
+        outputSampleRate <= 0 ||
+        channels <= 0) {
+      throw ArgumentError("Invalid converter parameters");
+    }
+
+    this.inputSampleRate = inputSampleRate;
+    this.outputSampleRate = outputSampleRate;
+    this.channels = channels;
+    this.format = format;
+
+    await _converter.init(
+      inputSampleRate: inputSampleRate,
+      outputSampleRate: outputSampleRate,
+      channels: channels,
+      format: format,
+    );
+
+    isInit = true;
+  }
+
+
+
+  Uint8List convert(Uint8List data) {
+    if (!isInit) {
+      throw StateError(
+          "Converter is not initialized"
+      );
+    }
+
+    return _converter.convert(data);
+  }
+
+  void dispose() {
+    if (!isInit) return;
+
+    _converter.dispose();
+
+    isInit = false;
+  }
+}
+
 /// A generator for waveforms and noise.
 final class Generator {
   Generator({Engine? mainEngine})

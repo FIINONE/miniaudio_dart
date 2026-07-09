@@ -24,6 +24,7 @@ abstract class MiniaudioDartPlatformInterface {
   PlatformEngine createEngine();
   PlatformRecorder createRecorder();
   PlatformGenerator createGenerator();
+  PlatformConverter createConverter();
 
   // Streaming player factory
   PlatformStreamPlayer createStreamPlayer({
@@ -141,6 +142,33 @@ abstract interface class PlatformRecorder {
   Future<bool> selectCaptureDeviceByIndex(int index);
   int getCaptureDeviceGeneration();
 
+  void dispose();
+}
+
+abstract interface class PlatformConverter {
+  factory PlatformConverter() => MiniaudioDartPlatformInterface.instance.createConverter();
+
+  /// Initialize PCM converter.
+  ///
+  /// Example:
+  /// input:
+  ///   s16 mono 16000Hz
+  ///
+  /// output:
+  ///   s16 mono 24000Hz
+  Future<void> init({
+    int inputSampleRate = 16000,
+    int outputSampleRate = 24000,
+    int channels = 1,
+    int format = AudioFormat.int16,
+  });
+
+  /// Convert PCM buffer.
+  ///
+  /// Returns converted PCM bytes.
+  Uint8List convert(Uint8List data);
+
+  /// Release native resources.
   void dispose();
 }
 

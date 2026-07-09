@@ -59,11 +59,33 @@ static void data_callback(ma_device* dev, void* pOutput, const void* pInput, ma_
             void* pWrite = NULL;
             if(ma_pcm_rb_acquire_write(&r->rb, &req, &pWrite) != MA_SUCCESS || req==0) break;
             
-            if(g != 1.0f && r->format == ma_format_f32) {
-                const float* s = (const float*)srcBytes;
-                float* d = (float*)pWrite;
-                ma_uint32 samples = req * (ma_uint32)r->channels;
-                for(ma_uint32 i=0;i<samples;i++) d[i] = s[i]*g;
+            if (g != 1.0f) {
+                if (r->format == ma_format_f32) {
+                    const float* s = (const float*)srcBytes;
+                    float* d = (float*)pWrite;
+
+                    ma_uint32 samples = req * (ma_uint32)r->channels;
+
+                    for (ma_uint32 i = 0; i < samples; i++) {
+                        d[i] = s[i] * g;
+                    }
+                } else if (r->format == ma_format_s16) {
+                    const int16_t* s = (const int16_t*)srcBytes;
+                    int16_t* d = (int16_t*)pWrite;
+
+                    ma_uint32 samples = req * (ma_uint32)r->channels;
+
+                    for (ma_uint32 i = 0; i < samples; i++) {
+                        int32_t value = (int32_t)(s[i] * g);
+
+                        if (value > INT16_MAX) value = INT16_MAX;
+                        if (value < INT16_MIN) value = INT16_MIN;
+
+                        d[i] = (int16_t)value;
+                    }
+                } else {
+                    memcpy(pWrite, srcBytes, (size_t)req * bpf);
+                }
             } else {
                 memcpy(pWrite, srcBytes, (size_t)req * bpf);
             }

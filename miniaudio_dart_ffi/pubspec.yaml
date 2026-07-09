@@ -32,6 +32,7 @@ ffigen:
       - "src/include/engine.h"
       - "src/include/sound.h"
       - "src/include/record.h"
+      - "src/include/converter.h"
       - "src/include/generator.h"
       - "src/include/circular_buffer.h"
       - "src/include/silence_data_source.h"

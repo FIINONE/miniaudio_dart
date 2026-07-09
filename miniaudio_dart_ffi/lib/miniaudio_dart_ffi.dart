@@ -35,6 +35,17 @@ class MiniaudioDartFfi extends MiniaudioDartPlatformInterface {
   }
 
   @override
+  PlatformConverter createConverter() {
+    final converter = bindings.converter_create();
+
+    if (converter == nullptr) {
+      throw MiniaudioDartPlatformOutOfMemoryException();
+    }
+
+    return FfiConverter(converter);
+  }
+
+  @override
   PlatformGenerator createGenerator() {
     final gen = bindings.generator_create();
     if (gen == nullptr) {
@@ -486,6 +497,150 @@ class FfiRecorder implements PlatformRecorder {
   @override
   int getCaptureDeviceGeneration() =>
       bindings.recorder_get_capture_device_generation(_self);
+}
+class FfiConverter implements PlatformConverter {
+  FfiConverter(Pointer<bindings.Converter> self) : _self = self;
+
+  final Pointer<bindings.Converter> _self;
+
+  int _inputSampleRate = 0;
+  int _outputSampleRate = 0;
+  int _channels = 0;
+  int _format = 0;
+
+  bool _initialized = false;
+
+  @override
+  Future<void> init({
+    int inputSampleRate = 16000,
+    int outputSampleRate = 24000,
+    int channels = 1,
+    int format = AudioFormat.int16,
+  }) async {
+    final cfgPtr = calloc<bindings.ConverterConfig>();
+
+    try {
+      cfgPtr.ref
+        ..inputSampleRate = inputSampleRate
+        ..outputSampleRate = outputSampleRate
+        ..channels = channels
+        ..formatAsInt = format;
+
+
+      final ok = bindings.converter_init(_self, cfgPtr);
+
+
+      if (ok != 1) {
+        throw MiniaudioDartPlatformException(
+            "Failed to initialize converter."
+        );
+      }
+
+
+      _inputSampleRate = inputSampleRate;
+      _outputSampleRate = outputSampleRate;
+      _channels = channels;
+      _format = format;
+
+      _initialized = true;
+
+
+    } finally {
+
+      calloc.free(cfgPtr);
+
+    }
+  }
+
+
+
+  @override
+  Uint8List convert(Uint8List data) {
+    if (!_initialized) {
+      throw MiniaudioDartPlatformException("Converter is not initialized.");
+    }
+
+
+    if (data.isEmpty) {
+      return Uint8List(0);
+    }
+
+    final bytesPerSample = _bytesPerSample(_format);
+
+
+    final inputFrames = data.length ~/ (bytesPerSample * _channels);
+
+    if (inputFrames <= 0) {
+      return Uint8List(0);
+    }
+
+    /*
+       Allocate output buffer.
+
+       Example:
+       16000 -> 24000
+
+       512 frames input
+       ~768 frames output
+    */
+
+    final ratio = _outputSampleRate / _inputSampleRate;
+
+    final outputCapacityFrames = (inputFrames * ratio).ceil() + 32;
+
+    final inputPtr = calloc<Uint8>(data.length);
+
+    final outputPtr = calloc<Uint8>(outputCapacityFrames * _channels * bytesPerSample);
+
+    try {
+      inputPtr.asTypedList(data.length).setAll(0, data);
+
+      final outputFrames =
+      bindings.converter_process(
+        _self,
+        inputPtr.cast(),
+        inputFrames,
+        outputPtr.cast(),
+        outputCapacityFrames,
+      );
+
+      if (outputFrames <= 0) {
+        return Uint8List(0);
+      }
+
+      final outputBytes = outputFrames * _channels * bytesPerSample;
+
+      return Uint8List.fromList(
+        outputPtr
+            .asTypedList(
+          outputBytes,
+        ),
+      );
+    } finally {
+      calloc.free(inputPtr);
+      calloc.free(outputPtr);
+    }
+  }
+
+  int _bytesPerSample(int format) {
+    switch(format) {
+      case AudioFormat.uint8:
+        return 1;
+      case AudioFormat.int16:
+        return 2;
+      case AudioFormat.float32:
+        return 4;
+      default:
+        throw UnsupportedError("Unsupported audio format: $format");
+    }
+  }
+
+  @override
+  void dispose() {
+    bindings.converter_destroy(_self);
+
+    _initialized = false;
+  }
 }
 
 // ================= StreamPlayer, Engine, Sound, Generator =================

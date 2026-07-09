@@ -503,6 +503,55 @@ external void recorder_free_capture_cache(
   ffi.Pointer<Recorder> r,
 );
 
+@ffi.Native<
+        ConverterConfig Function(ffi.Int, ffi.Int, ffi.Int, ffi.UnsignedInt)>(
+    symbol: 'converter_config_default')
+external ConverterConfig _converter_config_default(
+  int inputSampleRate,
+  int outputSampleRate,
+  int channels,
+  int format,
+);
+
+ConverterConfig converter_config_default(
+  int inputSampleRate,
+  int outputSampleRate,
+  int channels,
+  ma_format format,
+) =>
+    _converter_config_default(
+      inputSampleRate,
+      outputSampleRate,
+      channels,
+      format.value,
+    );
+
+@ffi.Native<ffi.Pointer<Converter> Function()>()
+external ffi.Pointer<Converter> converter_create();
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<Converter>)>()
+external void converter_destroy(
+  ffi.Pointer<Converter> converter,
+);
+
+@ffi.Native<
+    ffi.Int Function(ffi.Pointer<Converter>, ffi.Pointer<ConverterConfig>)>()
+external int converter_init(
+  ffi.Pointer<Converter> converter,
+  ffi.Pointer<ConverterConfig> config,
+);
+
+@ffi.Native<
+    ffi.Int Function(ffi.Pointer<Converter>, ffi.Pointer<ffi.Void>, ffi.Int,
+        ffi.Pointer<ffi.Void>, ffi.Int)>()
+external int converter_process(
+  ffi.Pointer<Converter> converter,
+  ffi.Pointer<ffi.Void> input,
+  int inputFrames,
+  ffi.Pointer<ffi.Void> output,
+  int outputCapacityFrames,
+);
+
 @ffi.Native<ffi.Int Function(ffi.Pointer<CircularBuffer>, ffi.Size)>()
 external int circular_buffer_init(
   ffi.Pointer<CircularBuffer> cb,
@@ -4992,6 +5041,24 @@ final class RecorderConfig extends ffi.Struct {
 
   @ffi.Int()
   external int autoStart;
+}
+
+final class Converter extends ffi.Opaque {}
+
+final class ConverterConfig extends ffi.Struct {
+  @ffi.Int()
+  external int inputSampleRate;
+
+  @ffi.Int()
+  external int outputSampleRate;
+
+  @ffi.Int()
+  external int channels;
+
+  @ffi.UnsignedInt()
+  external int formatAsInt;
+
+  ma_format get format => ma_format.fromValue(formatAsInt);
 }
 
 final class CircularBuffer extends ffi.Struct {
