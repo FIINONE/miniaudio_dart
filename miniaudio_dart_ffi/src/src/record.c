@@ -19,20 +19,8 @@ struct Recorder {
     int              isRecording;
     float            gain;
 
-    /* Codec configuration */
-    RecorderCodec    codec;
-    CrossCoder*      crossCoder;
-    
-    /* Ring buffer - stores either PCM frames or encoded packets */
+    /* Ring buffer - stores PCM frames */
     ma_pcm_rb        rb;
-    
-    /* For encoded data, we need different handling */
-    int              isEncodedMode;
-    uint8_t*         tempEncodeBuffer;
-    int              tempEncodeBufferSize;
-    
-    /* Codec config for dynamic changes */
-    RecorderCodecConfig currentCodecConfig;
 
     /* Device enumeration context & cache */
     ma_context            context;
@@ -51,98 +39,46 @@ static void data_callback(ma_device* dev, void* pOutput, const void* pInput, ma_
     const ma_uint32 bpf = r->frameSizeBytes;
     const ma_uint8* srcBytes = (const ma_uint8*)pInput;
 
-    if (r->codec == RECORDER_CODEC_PCM) {
-        /* PCM mode - direct to ring buffer */
-        ma_uint32 remaining = frameCount;
-        while(remaining > 0) {
-            ma_uint32 req = remaining;
-            void* pWrite = NULL;
-            if(ma_pcm_rb_acquire_write(&r->rb, &req, &pWrite) != MA_SUCCESS || req==0) break;
-            
-            if (g != 1.0f) {
-                if (r->format == ma_format_f32) {
-                    const float* s = (const float*)srcBytes;
-                    float* d = (float*)pWrite;
+    ma_uint32 remaining = frameCount;
+    while(remaining > 0) {
+        ma_uint32 req = remaining;
+        void* pWrite = NULL;
+        if(ma_pcm_rb_acquire_write(&r->rb, &req, &pWrite) != MA_SUCCESS || req==0) break;
 
-                    ma_uint32 samples = req * (ma_uint32)r->channels;
+        if (g != 1.0f) {
+            if (r->format == ma_format_f32) {
+                const float* s = (const float*)srcBytes;
+                float* d = (float*)pWrite;
 
-                    for (ma_uint32 i = 0; i < samples; i++) {
-                        d[i] = s[i] * g;
-                    }
-                } else if (r->format == ma_format_s16) {
-                    const int16_t* s = (const int16_t*)srcBytes;
-                    int16_t* d = (int16_t*)pWrite;
+                ma_uint32 samples = req * (ma_uint32)r->channels;
 
-                    ma_uint32 samples = req * (ma_uint32)r->channels;
+                for (ma_uint32 i = 0; i < samples; i++) {
+                    d[i] = s[i] * g;
+                }
+            } else if (r->format == ma_format_s16) {
+                const int16_t* s = (const int16_t*)srcBytes;
+                int16_t* d = (int16_t*)pWrite;
 
-                    for (ma_uint32 i = 0; i < samples; i++) {
-                        int32_t value = (int32_t)(s[i] * g);
+                ma_uint32 samples = req * (ma_uint32)r->channels;
 
-                        if (value > INT16_MAX) value = INT16_MAX;
-                        if (value < INT16_MIN) value = INT16_MIN;
+                for (ma_uint32 i = 0; i < samples; i++) {
+                    int32_t value = (int32_t)(s[i] * g);
 
-                        d[i] = (int16_t)value;
-                    }
-                } else {
-                    memcpy(pWrite, srcBytes, (size_t)req * bpf);
+                    if (value > INT16_MAX) value = INT16_MAX;
+                    if (value < INT16_MIN) value = INT16_MIN;
+
+                    d[i] = (int16_t)value;
                 }
             } else {
                 memcpy(pWrite, srcBytes, (size_t)req * bpf);
             }
-            
-            ma_pcm_rb_commit_write(&r->rb, req);
-            srcBytes   += (size_t)req * bpf;
-            remaining  -= req;
+        } else {
+            memcpy(pWrite, srcBytes, (size_t)req * bpf);
         }
-    } else if (r->codec == RECORDER_CODEC_OPUS && r->crossCoder) {
-        /* Opus mode - encode first, then store packets in ring buffer */
-        if (r->format == ma_format_f32) {
-            const float* inputF32 = (const float*)pInput;
-            
-            /* Apply gain if needed */
-            float* processedInput = (float*)inputF32;
-            if (g != 1.0f) {
-                /* Use temp buffer for gain-adjusted input */
-                int sampleCount = (int)frameCount * r->channels;
-                if (!r->tempEncodeBuffer || r->tempEncodeBufferSize < sampleCount * sizeof(float)) {
-                    free(r->tempEncodeBuffer);
-                    r->tempEncodeBufferSize = sampleCount * sizeof(float);
-                    r->tempEncodeBuffer = malloc(r->tempEncodeBufferSize);
-                }
-                if (r->tempEncodeBuffer) {
-                    float* temp = (float*)r->tempEncodeBuffer;
-                    for (int i = 0; i < sampleCount; i++) {
-                        temp[i] = inputF32[i] * g;
-                    }
-                    processedInput = temp;
-                }
-            }
 
-            /* Encode the frames */
-            uint8_t encodedPacket[4096]; /* Reasonable max packet size */
-            int encodedBytes = 0;
-            
-            crosscoder_encode_push_f32(r->crossCoder,
-                                     processedInput,
-                                     (int)frameCount,
-                                     encodedPacket,
-                                     sizeof(encodedPacket),
-                                     &encodedBytes);
-            
-            /* Store encoded packet in ring buffer if we got one */
-            if (encodedBytes > 0) {
-                /* For encoded mode, we treat the ring buffer as storing bytes */
-                ma_uint32 bytesToWrite = (ma_uint32)encodedBytes;
-                void* pWrite = NULL;
-                ma_uint32 availableBytes = 0;
-                
-                if (ma_pcm_rb_acquire_write(&r->rb, &availableBytes, &pWrite) == MA_SUCCESS && 
-                    availableBytes >= bytesToWrite) {
-                    memcpy(pWrite, encodedPacket, bytesToWrite);
-                    ma_pcm_rb_commit_write(&r->rb, bytesToWrite);
-                }
-            }
-        }
+        ma_pcm_rb_commit_write(&r->rb, req);
+        srcBytes   += (size_t)req * bpf;
+        remaining  -= req;
     }
 }
 
@@ -152,18 +88,7 @@ RecorderConfig recorder_config_default(int sampleRate, int channels, ma_format f
     cfg.channels              = channels;
     cfg.format                = format;
     cfg.bufferDurationSeconds = 5;
-    cfg.codecConfig           = NULL; /* PCM default */
     cfg.autoStart             = 0;
-    return cfg;
-}
-
-RecorderCodecConfig recorder_codec_config_opus_default(void) {
-    RecorderCodecConfig cfg;
-    cfg.codec           = RECORDER_CODEC_OPUS;
-    cfg.opusApplication = 2049; /* OPUS_APPLICATION_AUDIO */
-    cfg.opusBitrate     = 64000;
-    cfg.opusComplexity  = 5;
-    cfg.opusVBR         = 1;
     return cfg;
 }
 
@@ -175,7 +100,7 @@ Recorder* recorder_create(void) {
 static int recorder_ensure_context(Recorder* r) {
     if (!r) return 0;
     if (r->context_initialized) return 1;
-    
+
     ma_context_config cfg = ma_context_config_init();
     if (ma_context_init(NULL, 0, &cfg, &r->context) != MA_SUCCESS) {
         return 0;
@@ -202,7 +127,7 @@ int recorder_refresh_capture_devices(Recorder* r) {
     ma_device_info* pCapture = NULL;
     ma_uint32 captureCount = 0;
 
-    if (ma_context_get_devices(&r->context, &pPlayback, &playbackCount, 
+    if (ma_context_get_devices(&r->context, &pPlayback, &playbackCount,
                                &pCapture, &captureCount) != MA_SUCCESS) {
         return 0;
     }
@@ -238,7 +163,7 @@ int recorder_get_capture_device_name(Recorder* r, ma_uint32 index,
                                      char* outName, ma_uint32 capName,
                                      ma_bool32* pIsDefault) {
     if (!r || index >= r->captureCount || !outName || capName == 0) return 0;
-    
+
     CaptureDeviceInfo* info = &r->captureInfos[index];
     strncpy(outName, info->name, capName - 1);
     outName[capName - 1] = '\0';
@@ -297,8 +222,6 @@ void recorder_destroy(Recorder* r) {
         r->context_initialized = 0;
     }
     recorder_free_capture_cache(r);
-    if(r->crossCoder) crosscoder_destroy(r->crossCoder);
-    if(r->tempEncodeBuffer) free(r->tempEncodeBuffer);
     ma_pcm_rb_uninit(&r->rb);
     free(r);
 }
@@ -313,44 +236,13 @@ int recorder_init(Recorder* r, const RecorderConfig* cfg) {
     r->frameSizeBytes = (ma_uint32)(ma_get_bytes_per_sample(r->format) * r->channels);
     r->isRecording    = 0;
     r->gain           = 1.0f;
-    r->codec          = cfg->codecConfig ? cfg->codecConfig->codec : RECORDER_CODEC_PCM;
-    r->isEncodedMode  = (r->codec != RECORDER_CODEC_PCM);
-
-    /* For encoded mode, force f32 format */
-    if (r->isEncodedMode && r->format != ma_format_f32) {
-        r->format = ma_format_f32;
-        r->frameSizeBytes = (ma_uint32)(ma_get_bytes_per_sample(ma_format_f32) * r->channels);
-    }
 
     ma_uint64 capacityFrames = (ma_uint64)cfg->sampleRate * (ma_uint64)cfg->bufferDurationSeconds;
     if(capacityFrames < 1024) capacityFrames = 1024;
     if(capacityFrames > 0x7FFFFFFFULL) capacityFrames = 0x7FFFFFFF;
 
-    /* For encoded mode, allocate ring buffer in bytes instead of frames */
-    if (r->isEncodedMode) {
-        /* Estimate encoded data size - very rough heuristic */
-        ma_uint64 estimatedBytes = capacityFrames * 2; /* Compressed audio is typically much smaller */
-        if (ma_pcm_rb_init(ma_format_u8, 1, (ma_uint32)estimatedBytes, NULL, NULL, &r->rb) != MA_SUCCESS) {
-            return 0;
-        }
-    } else {
-        if(ma_pcm_rb_init(r->format, (ma_uint32)r->channels, (ma_uint32)capacityFrames, NULL, NULL, &r->rb) != MA_SUCCESS) {
-            return 0;
-        }
-    }
-
-    /* Initialize codec if needed */
-    if (r->codec == RECORDER_CODEC_OPUS && cfg->codecConfig) {
-        CodecConfig ccfg;
-        ccfg.sample_rate     = r->sampleRate;
-        ccfg.channels        = r->channels;
-        ccfg.bits_per_sample = 32;
-        
-        r->crossCoder = crosscoder_create(&ccfg, CODEC_ID_OPUS, cfg->codecConfig->opusApplication, 1);
-        if (!r->crossCoder) {
-            ma_pcm_rb_uninit(&r->rb);
-            return 0;
-        }
+    if(ma_pcm_rb_init(r->format, (ma_uint32)r->channels, (ma_uint32)capacityFrames, NULL, NULL, &r->rb) != MA_SUCCESS) {
+        return 0;
     }
 
     /* Initialize device */
@@ -362,7 +254,6 @@ int recorder_init(Recorder* r, const RecorderConfig* cfg) {
     r->deviceConfig.pUserData        = r;
 
     if(ma_device_init(NULL, &r->deviceConfig, &r->device) != MA_SUCCESS) {
-        if(r->crossCoder) crosscoder_destroy(r->crossCoder);
         ma_pcm_rb_uninit(&r->rb);
         return 0;
     }
@@ -393,15 +284,7 @@ int recorder_is_recording(const Recorder* r) {
 
 int recorder_get_available_frames(Recorder* r) {
     if(!r) return 0;
-    ma_uint32 available = ma_pcm_rb_available_read(&r->rb);
-    
-    if (r->isEncodedMode) {
-        /* In encoded mode, available is in bytes, but we still call them "frames" for API consistency */
-        return (int)available;
-    } else {
-        /* In PCM mode, available is actual frame count */
-        return (int)available;
-    }
+    return (int)ma_pcm_rb_available_read(&r->rb);
 }
 
 int recorder_acquire_read_region(Recorder* r, void** outPtr, int* outFrames) {
@@ -433,32 +316,4 @@ void recorder_set_capture_gain(Recorder* r, float gain) {
 
 float recorder_get_capture_gain(Recorder* r) {
     return r ? r->gain : 1.0f;
-}
-
-
-int recorder_update_codec_config(Recorder* r, const RecorderCodecConfig* codecConfig) {
-    if (!r || !codecConfig) return 0;
-    
-    /* If we have a crosscoder, update its configuration */
-    if (r->crossCoder) {
-        int success = 1;
-        if (codecConfig->codec == RECORDER_CODEC_OPUS) {
-            success &= crosscoder_set_bitrate(r->crossCoder, codecConfig->opusBitrate);
-            success &= crosscoder_set_complexity(r->crossCoder, codecConfig->opusComplexity);
-            success &= crosscoder_set_vbr(r->crossCoder, codecConfig->opusVBR);
-        }
-        
-        if (success) {
-            /* Update our stored config */
-            r->currentCodecConfig = *codecConfig;
-            return 1;
-        }
-    }
-    
-    return 0;
-}
-
-RecorderCodec recorder_get_codec(Recorder* r) {
-    if (!r) return RECORDER_CODEC_PCM;
-    return r->currentCodecConfig.codec;
 }

@@ -152,8 +152,6 @@ void stream_player_set_pan(int self, double pan) =>
 double stream_player_get_pan(int self) => _stream_player_get_pan(self);
 int stream_player_write_frames_f32(int self, int data, int frames) =>
     _stream_player_write_frames_f32(self, data, frames);
-int stream_player_push_encoded_packet(int self, int data, int bytes) =>
-    _stream_player_push_encoded_packet(self, data, bytes);
 
 // StreamPlayer with config struct (matching FFI)
 int stream_player_init_with_engine(int self, int engine, int configPtr) =>
@@ -195,37 +193,6 @@ external void _stream_player_set_pan(int self, double pan);
 external double _stream_player_get_pan(int self);
 @JS()
 external int _stream_player_write_frames_f32(int self, int data, int frames);
-@JS()
-external int _stream_player_push_encoded_packet(int self, int data, int bytes);
-
-// CrossCoder functions
-int crosscoder_create(
-        int configPtr, int codecId, int application, int accumulate) =>
-    _crosscoder_create(configPtr, codecId, application, accumulate);
-void crosscoder_destroy(int self) => _crosscoder_destroy(self);
-int crosscoder_frame_size(int self) => _crosscoder_frame_size(self);
-int crosscoder_encode_push_f32(int self, int framesPtr, int frameCount,
-        int outPacketPtr, int outCap, int outBytesPtr) =>
-    _crosscoder_encode_push_f32(
-        self, framesPtr, frameCount, outPacketPtr, outCap, outBytesPtr);
-int crosscoder_decode_packet(int self, int packetPtr, int packetLen,
-        int outFramesPtr, int maxFrames) =>
-    _crosscoder_decode_packet(
-        self, packetPtr, packetLen, outFramesPtr, maxFrames);
-
-@JS()
-external int _crosscoder_create(
-    int configPtr, int codecId, int application, int accumulate);
-@JS()
-external void _crosscoder_destroy(int self);
-@JS()
-external int _crosscoder_frame_size(int self);
-@JS()
-external int _crosscoder_encode_push_f32(int self, int framesPtr,
-    int frameCount, int outPacketPtr, int outCap, int outBytesPtr);
-@JS()
-external int _crosscoder_decode_packet(
-    int self, int packetPtr, int packetLen, int outFramesPtr, int maxFrames);
 
 // Generator functions
 int generator_create() => _generator_create();

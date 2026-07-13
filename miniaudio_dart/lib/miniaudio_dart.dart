@@ -8,8 +8,6 @@ export "package:miniaudio_dart_platform_interface/miniaudio_dart_platform_interf
         MiniaudioDartPlatformException,
         MiniaudioDartPlatformOutOfMemoryException,
         NoiseType,
-        RecorderCodec,
-        RecorderCodecConfig,
         WaveformType;
 
 /// Controls the loading and unloading of `Sound`s.
@@ -298,61 +296,6 @@ final class Sound {
   }
 }
 
-/// Standalone codec for manual encoding/decoding
-final class CrossCoder {
-  CrossCoder()
-      : _crossCoder =
-            MiniaudioDartPlatformInterface.instance.createCrossCoder();
-
-  final PlatformCrossCoder _crossCoder;
-  bool _isInit = false;
-
-  /// Initialize the cross-coder with audio parameters and codec
-  Future<bool> init({
-    required int sampleRate,
-    required int channels,
-    required int codecId, // 1 = Opus, 0 = PCM
-    int application = 2049, // OPUS_APPLICATION_AUDIO
-  }) async {
-    final success = await _crossCoder.init(sampleRate, channels, codecId,
-        application: application);
-    _isInit = success;
-    return success;
-  }
-
-  /// Check if CrossCoder is initialized
-  bool get isInit => _isInit;
-
-  /// Get frame size for this codec
-  int get frameSize => _crossCoder.frameSize;
-
-  /// Encode PCM frames to compressed packet - returns (packet, bytesWritten)
-  (Uint8List packet, int bytesWritten) encodeFramesWithSize(
-      Float32List frames) {
-    if (!_isInit) return (Uint8List(0), 0);
-    return _crossCoder.encodeFrames(frames);
-  }
-
-  /// Encode PCM frames to compressed packet
-  Uint8List encodeFrames(Float32List frames) {
-    final (packet, _) = encodeFramesWithSize(frames);
-    return packet;
-  }
-
-  /// Decode compressed packet to PCM frames
-  Float32List decodePacket(Uint8List packet) {
-    if (!_isInit) return Float32List(0);
-    return _crossCoder.decodePacket(packet);
-  }
-
-  /// Dispose resources
-  void dispose() {
-    if (!_isInit) return;
-    _crossCoder.dispose();
-    _isInit = false;
-  }
-}
-
 final class Recorder {
   Recorder({Engine? mainEngine})
       : engine = mainEngine ?? Engine(),
@@ -363,18 +306,16 @@ final class Recorder {
   late int sampleRate;
   late int channels;
   late int format;
-  RecorderCodecConfig? _codecConfig;
   bool isInit = false;
   bool isRecording = false;
   bool isDisposed = false;
 
-  /// Initializes the recorder for streaming with optional codec configuration.
+  /// Initializes the recorder for streaming.
   Future<void> initStream({
     int sampleRate = 48000,
     int channels = 1,
     int format = AudioFormat.float32,
     int bufferDurationSeconds = 5,
-    RecorderCodecConfig? codecConfig,
   }) async {
     if (sampleRate <= 0 || channels <= 0 || bufferDurationSeconds <= 0) {
       throw ArgumentError("Invalid recorder parameters");
@@ -386,37 +327,25 @@ final class Recorder {
       this.sampleRate = sampleRate;
       this.channels = channels;
       this.format = format;
-      _codecConfig = codecConfig;
 
       await _recorder.initStream(
         sampleRate: sampleRate,
         channels: channels,
         format: format,
         bufferDurationSeconds: bufferDurationSeconds,
-        codecConfig: codecConfig,
       );
       isInit = true;
     }
   }
 
-  /// Update codec configuration at runtime (e.g., bitrate changes)
-  Future<bool> updateCodecConfig(RecorderCodecConfig codecConfig) async {
-    if (!isInit) return false;
-    _codecConfig = codecConfig;
-    return await _recorder.updateCodecConfig(codecConfig);
-  }
-
-  /// Gets the codec currently in use
-  RecorderCodec get codec => _codecConfig?.codec ?? RecorderCodec.pcm;
-
-  /// Gets the recorded buffer (automatically returns correct type based on codec)
+  /// Gets the recorded buffer
   dynamic getBuffer(int framesToRead) => _recorder.getBuffer(framesToRead);
 
-  /// Pull a chunk (non-blocking). Auto-detects return type based on codec.
+  /// Pull a chunk (non-blocking).
   dynamic readChunk({int maxFrames = 512}) =>
       _recorder.readChunk(maxFrames: maxFrames);
 
-  /// Streams recorded audio/data. Returns appropriate type automatically.
+  /// Streams recorded PCM audio.
   Stream<dynamic> stream({int intervalMs = 20, int maxFramesPerChunk = 0}) {
     if (!isInit || !isRecording) {
       throw StateError("Recorder is not initialized or not recording");
@@ -437,9 +366,7 @@ final class Recorder {
     final interval = Duration(milliseconds: intervalMs);
     return Stream.periodic(interval, (_) {
       final framesAvail = getAvailableFrames();
-      if (framesAvail <= 0) {
-        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
-      }
+      if (framesAvail <= 0) return emptyPcm();
       final limit = maxFramesPerChunk > 0 ? maxFramesPerChunk : framesAvail;
       return readChunk(maxFrames: limit);
     }).where((c) => c.isNotEmpty);
@@ -858,18 +785,11 @@ final class StreamPlayer {
     return _player!.writeInt16(interleaved);
   }
 
-  /// Push any data - auto-detects PCM vs encoded and handles appropriately
+  /// Push PCM data (Float32List or Int16List)
   bool pushData(dynamic data) {
     _ensureInit();
     if (data == null) return false;
     return _player!.pushData(data);
-  }
-
-  /// Push any encoded packet - codec auto-detected and decoded automatically
-  bool pushEncodedPacket(Uint8List packet) {
-    _ensureInit();
-    if (packet.isEmpty) return false;
-    return _player!.pushEncodedPacket(packet);
   }
 
   void dispose() {

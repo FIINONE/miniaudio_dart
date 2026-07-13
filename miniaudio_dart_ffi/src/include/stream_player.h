@@ -10,9 +10,6 @@
 #else
 #error "miniaudio.h not found"
 #endif
-#include "codec.h"
-#include "codec_runtime.h"
-#include "codec_packet_format.h"
 #include "export.h"
 
 #ifdef __cplusplus
@@ -26,8 +23,6 @@ typedef struct StreamPlayerConfig {
     int       channels;
     int       sampleRate;
     uint32_t  bufferMilliseconds;
-    int       allowCodecPackets;
-    int       decodeAccumFrames; /* reserved */
 } StreamPlayerConfig;
 
 EXPORT StreamPlayerConfig stream_player_config_default(int channels, int sampleRate);
@@ -59,16 +54,6 @@ EXPORT size_t stream_player_write_frames_f32(StreamPlayer* sp,
 EXPORT size_t stream_player_write_frames_s16(StreamPlayer* sp,
                                              const int16_t* frames,
                                              size_t frameCount);
-
-EXPORT int stream_player_push_encoded_packet(StreamPlayer* sp,
-                                             const void* packet,
-                                             int packetBytes);
-
-/* Called by codec runtime to deliver decoded PCM. */
-EXPORT int codec_runtime_on_decoded_frames(CodecRuntime* rt,
-                                           const float* pcm,
-                                           int frames,
-                                           void* userData);
 
 #ifdef __cplusplus
 }

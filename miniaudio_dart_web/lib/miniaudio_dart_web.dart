@@ -58,14 +58,12 @@ class MiniaudioDartWeb extends MiniaudioDartPlatformInterface {
     }
 
     // Create StreamPlayerConfig struct (matching FFI)
-    final cfgPtr = mem.allocate(28); // sizeof(StreamPlayerConfig)
+    final cfgPtr = mem.allocate(16); // sizeof(StreamPlayerConfig)
     try {
       mem.writeI32(cfgPtr, format); // formatAsInt
       mem.writeI32(cfgPtr + 4, channels); // channels
       mem.writeI32(cfgPtr + 8, sampleRate); // sampleRate
       mem.writeI32(cfgPtr + 12, bufferMs); // bufferMilliseconds
-      mem.writeI32(cfgPtr + 16, 1); // allowCodecPackets = true
-      mem.writeI32(cfgPtr + 20, 0); // decodeAccumFrames = 0
 
       final ok = wasm.stream_player_init_with_engine(sp, engWrapper, cfgPtr);
       if (ok != 1) {
@@ -77,121 +75,6 @@ class MiniaudioDartWeb extends MiniaudioDartPlatformInterface {
     }
 
     return WebStreamPlayer._(sp, channels);
-  }
-
-  @override
-  PlatformCrossCoder createCrossCoder() {
-    return WebCrossCoder();
-  }
-}
-
-// Web CrossCoder implementation (matching FFI)
-class WebCrossCoder implements PlatformCrossCoder {
-  int? _self;
-  int _channels = 1;
-
-  @override
-  Future<bool> init(int sampleRate, int channels, int codecId,
-      {int application = 2049}) async {
-    final configPtr = mem.allocate(12); // sizeof(CodecConfig)
-    try {
-      mem.writeI32(configPtr, sampleRate); // sample_rate
-      mem.writeI32(configPtr + 4, channels); // channels
-      mem.writeI32(configPtr + 8, 32); // bits_per_sample
-
-      _self = wasm.crosscoder_create(configPtr, codecId, application, 1);
-      _channels = channels; // track channels for proper frame count
-      return _self != null && _self! != 0;
-    } finally {
-      mem.free(configPtr);
-    }
-  }
-
-  @override
-  int get frameSize {
-    if (_self == null || _self == 0) return 0;
-    return wasm.crosscoder_frame_size(_self!);
-  }
-
-  @override
-  (Uint8List, int) encodeFrames(Float32List frames) {
-    if (_self == null || _self == 0 || frames.isEmpty) return (Uint8List(0), 0);
-
-    final framesPtr = mem.allocate(frames.length * 4); // Float32 = 4 bytes
-    final outPacketPtr = mem.allocate(4096);
-    final outBytesPtr = mem.allocate(4); // for actual bytes written
-
-    try {
-      // Copy frames to WASM memory
-      final heap = mem.HEAPF32.toDart;
-      final offset = framesPtr >> 2; // Float32 offset
-      heap.setAll(offset, frames);
-
-      // Pass number of PCM frames (samples / channels), NOT packets
-      final frameCount = frames.length ~/ _channels;
-      if (frameCount <= 0) return (Uint8List(0), 0);
-
-      final result = wasm.crosscoder_encode_push_f32(
-        _self!,
-        framesPtr,
-        frameCount,
-        outPacketPtr,
-        4096,
-        outBytesPtr,
-      );
-
-      final bytesWritten = mem.readI32(outBytesPtr);
-
-      if (result > 0 && bytesWritten > 0) {
-        final heapU8 = mem.HEAPU8.toDart;
-        final pkt = Uint8List.fromList(
-            heapU8.sublist(outPacketPtr, outPacketPtr + bytesWritten));
-        return (pkt, bytesWritten);
-      }
-      return (Uint8List(0), 0);
-    } finally {
-      mem.free(framesPtr);
-      mem.free(outPacketPtr);
-      mem.free(outBytesPtr);
-    }
-  }
-
-  @override
-  Float32List decodePacket(Uint8List packet) {
-    if (_self == null || _self == 0 || packet.isEmpty) return Float32List(0);
-
-    final packetPtr = mem.allocate(packet.length);
-    final outFramesPtr = mem.allocate(4800 * 4); // Max frames * 4 bytes
-
-    try {
-      // Copy packet to WASM memory
-      final heapU8 = mem.HEAPU8.toDart;
-      heapU8.setAll(packetPtr, packet);
-
-      final decodedFrames = wasm.crosscoder_decode_packet(
-        _self!,
-        packetPtr,
-        packet.length,
-        outFramesPtr,
-        4800,
-      );
-
-      if (decodedFrames > 0) {
-        return mem.readF32(outFramesPtr, decodedFrames);
-      }
-      return Float32List(0);
-    } finally {
-      mem.free(packetPtr);
-      mem.free(outFramesPtr);
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_self != null && _self! != 0) {
-      wasm.crosscoder_destroy(_self!);
-      _self = null;
-    }
   }
 }
 
@@ -298,27 +181,8 @@ final class WebStreamPlayer implements PlatformStreamPlayer {
       return writeFloat32(data) > 0;
     } else if (data is Int16List) {
       return writeInt16(data) > 0;
-    } else if (data is Uint8List) {
-      return pushEncodedPacket(data);
     }
     return false;
-  }
-
-  @override
-  bool pushEncodedPacket(Uint8List packet) {
-    if (packet.isEmpty) return false;
-    if (_scratchBytes < packet.length) {
-      final newPtr = mem.allocate(packet.length);
-      if (newPtr == 0) return false;
-      if (_scratchPtr != 0) mem.free(_scratchPtr);
-      _scratchPtr = newPtr;
-      _scratchBytes = packet.length;
-    }
-    final heap = mem.HEAPU8.toDart;
-    heap.setRange(_scratchPtr, _scratchPtr + packet.length, packet);
-    final ok = wasm.stream_player_push_encoded_packet(
-        _self, _scratchPtr, packet.length);
-    return ok == 1;
   }
 
   @override
@@ -338,7 +202,6 @@ class WebRecorder implements PlatformRecorder {
   WebRecorder(this._self);
   final int _self;
   int _channels = 0;
-  RecorderCodecConfig? _codecConfig;
 
   @override
   Future<void> initStream({
@@ -346,10 +209,8 @@ class WebRecorder implements PlatformRecorder {
     int channels = 1,
     int format = AudioFormat.float32,
     int bufferDurationSeconds = 5,
-    RecorderCodecConfig? codecConfig,
   }) async {
-    final cfgPtr = mem.allocate(28); // sizeof(RecorderConfig)
-    final codecCfgPtr = codecConfig != null ? mem.allocate(20) : 0;
+    final cfgPtr = mem.allocate(20); // sizeof(RecorderConfig)
 
     try {
       // Fill RecorderConfig struct
@@ -357,17 +218,7 @@ class WebRecorder implements PlatformRecorder {
       mem.writeI32(cfgPtr + 4, channels); // channels
       mem.writeI32(cfgPtr + 8, format); // formatAsInt
       mem.writeI32(cfgPtr + 12, bufferDurationSeconds); // bufferDurationSeconds
-      mem.writeI32(cfgPtr + 16, codecCfgPtr); // codecConfig pointer
-      mem.writeI32(cfgPtr + 20, 0); // autoStart = false
-
-      // Fill codec config if provided
-      if (codecConfig != null && codecCfgPtr != 0) {
-        mem.writeI32(codecCfgPtr, codecConfig.codec.value); // codecAsInt
-        mem.writeI32(codecCfgPtr + 4, codecConfig.opusApplication);
-        mem.writeI32(codecCfgPtr + 8, codecConfig.opusBitrate);
-        mem.writeI32(codecCfgPtr + 12, codecConfig.opusComplexity);
-        mem.writeI32(codecCfgPtr + 16, codecConfig.opusVBR ? 1 : 0);
-      }
+      mem.writeI32(cfgPtr + 16, 0); // autoStart = false
 
       final ok = await wasm.recorder_init(_self, cfgPtr);
       if (ok != 1) {
@@ -375,57 +226,30 @@ class WebRecorder implements PlatformRecorder {
       }
 
       _channels = channels;
-      _codecConfig = codecConfig;
     } finally {
       mem.free(cfgPtr);
-      if (codecCfgPtr != 0) mem.free(codecCfgPtr);
     }
-  }
-
-  @override
-  RecorderCodec get codec => _codecConfig?.codec ?? RecorderCodec.pcm;
-
-  @override
-  Future<bool> updateCodecConfig(RecorderCodecConfig codecConfig) async {
-    // Not implemented in web yet
-    return false;
   }
 
   @override
   dynamic readChunk({int maxFrames = 512}) {
-    if (_channels == 0) {
-      return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
-    }
+    if (_channels == 0) return Float32List(0);
 
     final ptrOut = mem.allocate(4);
     final framesOut = mem.allocate(4);
     try {
       final ok = wasm.recorder_acquire_read_region(_self, ptrOut, framesOut);
-      if (ok == 0) {
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
-      }
+      if (ok == 0) return Float32List(0);
 
       final available = mem.readI32(framesOut);
-      if (available <= 0) {
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
-      }
+      if (available <= 0) return Float32List(0);
 
       final use = available > maxFrames ? maxFrames : available;
       final dataPtr = mem.readI32(ptrOut);
-      if (dataPtr == 0) {
-        return codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0);
-      }
+      if (dataPtr == 0) return Float32List(0);
 
-      dynamic result;
-      if (codec == RecorderCodec.pcm) {
-        // PCM data - return as Float32List
-        final floats = use * _channels;
-        result = mem.readF32(dataPtr, floats);
-      } else {
-        // Encoded data - return as Uint8List
-        final heapU8 = mem.HEAPU8.toDart;
-        result = Uint8List.fromList(heapU8.sublist(dataPtr, dataPtr + use));
-      }
+      final floats = use * _channels;
+      final result = mem.readF32(dataPtr, floats);
 
       wasm.recorder_commit_read_frames(_self, use);
       return result;
@@ -436,9 +260,8 @@ class WebRecorder implements PlatformRecorder {
   }
 
   @override
-  dynamic getBuffer(int framesToRead) => framesToRead <= 0
-      ? (codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0))
-      : readChunk(maxFrames: framesToRead);
+  dynamic getBuffer(int framesToRead) =>
+      framesToRead <= 0 ? Float32List(0) : readChunk(maxFrames: framesToRead);
 
   @override
   void start() {

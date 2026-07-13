@@ -74,9 +74,7 @@ class MiniaudioDartFfi extends MiniaudioDartPlatformInterface {
         ..formatAsInt = format
         ..channels = channels
         ..sampleRate = sampleRate
-        ..bufferMilliseconds = bufferMs
-        ..allowCodecPackets = 1 // Always allow codec packets
-        ..decodeAccumFrames = 0;
+        ..bufferMilliseconds = bufferMs;
 
       final ok = bindings.stream_player_init_with_engine(
           sp, engWrapper.cast(), cfgPtr);
@@ -89,12 +87,6 @@ class MiniaudioDartFfi extends MiniaudioDartPlatformInterface {
     }
 
     return FfiStreamPlayer._(sp, channels);
-  }
-
-  // Add CrossCoder factory method (standalone)
-  @override
-  PlatformCrossCoder createCrossCoder() {
-    return FfiCrossCoder();
   }
 
   @override
@@ -170,170 +162,12 @@ class FfiMp3Encoder implements PlatformMp3Encoder {
   }
 }
 
-// Keep standalone CrossCoder implementation
-class FfiCrossCoder implements PlatformCrossCoder {
-  Pointer<bindings.CrossCoder>? _self;
-
-  @override
-  Future<bool> init(int sampleRate, int channels, int codecId,
-      {int application = 2049}) async {
-    final cfgPtr = calloc<bindings.CodecConfig>();
-    try {
-      cfgPtr.ref
-        ..sample_rate = sampleRate
-        ..channels = channels
-        ..bits_per_sample = 32; // Float32
-
-      _self = bindings.crosscoder_create(
-          cfgPtr,
-          bindings.CodecID.fromValue(codecId),
-          application,
-          1); // accumulate = true
-
-      final success = _self != nullptr;
-      print('CrossCoder created: $_self, success: $success');
-
-      if (success) {
-        final frameSize = bindings.crosscoder_frame_size(_self!);
-        print('CrossCoder frameSize after creation: $frameSize');
-      }
-
-      return success;
-    } catch (e) {
-      print('CrossCoder init error: $e');
-      return false;
-    } finally {
-      calloc.free(cfgPtr);
-    }
-  }
-
-  @override
-  int get frameSize {
-    if (_self == nullptr) {
-      print('frameSize called on null CrossCoder');
-      return 0;
-    }
-    final size = bindings.crosscoder_frame_size(_self!);
-    return size;
-  }
-
-  @override
-  (Uint8List packet, int bytesWritten) encodeFrames(Float32List frames) {
-    if (_self == nullptr || frames.isEmpty) {
-      return (Uint8List(0), 0);
-    }
-
-    final channels = 1; // From init
-    final expectedFrames = frameSize;
-    final expectedSamples = expectedFrames * channels;
-
-    // For PCM passthrough, we might need exact frame count
-    if (frames.length != expectedSamples) {
-      // For testing, let's pad or truncate
-      final adjustedFrames = Float32List(expectedSamples);
-      final copyCount =
-          frames.length < expectedSamples ? frames.length : expectedSamples;
-      for (int i = 0; i < copyCount; i++) {
-        adjustedFrames[i] = frames[i];
-      }
-      return _doEncode(adjustedFrames, expectedFrames);
-    }
-
-    return _doEncode(frames, expectedFrames);
-  }
-
-  (Uint8List packet, int bytesWritten) _doEncode(
-      Float32List frames, int frameCount) {
-    final framesPtr = calloc<Float>(frames.length);
-    final outPacket = calloc<Uint8>(4096);
-    final outBytesPtr = calloc<Int>();
-
-    try {
-      // Copy frames to native memory
-      for (int i = 0; i < frames.length; i++) {
-        framesPtr[i] = frames[i];
-      }
-
-      final result = bindings.crosscoder_encode_push_f32(
-        _self!,
-        framesPtr,
-        frameCount,
-        outPacket,
-        4096,
-        outBytesPtr,
-      );
-
-      final bytesWritten = outBytesPtr.value;
-
-      if (result > 0 && bytesWritten > 0) {
-        final packet = Uint8List.fromList(outPacket.asTypedList(bytesWritten));
-        return (packet, bytesWritten);
-      }
-      return (Uint8List(0), 0);
-    } catch (e) {
-      print('Encode error: $e');
-      return (Uint8List(0), 0);
-    } finally {
-      calloc.free(framesPtr);
-      calloc.free(outPacket);
-      calloc.free(outBytesPtr);
-    }
-  }
-
-  @override
-  Float32List decodePacket(Uint8List packet) {
-    if (_self == nullptr || packet.isEmpty) return Float32List(0);
-
-    final packetPtr = calloc<Uint8>(packet.length);
-    final maxFrames = frameSize * 2; // Give some buffer
-    final outFramesPtr = calloc<Float>(maxFrames);
-
-    try {
-      // Copy packet to native memory
-      for (int i = 0; i < packet.length; i++) {
-        packetPtr[i] = packet[i];
-      }
-
-      final decodedFrames = bindings.crosscoder_decode_packet(
-        _self!,
-        packetPtr,
-        packet.length,
-        outFramesPtr,
-        maxFrames,
-      );
-
-      print('Decode result: $decodedFrames frames from ${packet.length} bytes');
-
-      if (decodedFrames > 0) {
-        return Float32List.fromList(outFramesPtr.asTypedList(decodedFrames));
-      }
-      return Float32List(0);
-    } catch (e) {
-      print('Decode error: $e');
-      return Float32List(0);
-    } finally {
-      calloc.free(packetPtr);
-      calloc.free(outFramesPtr);
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_self != nullptr) {
-      bindings.crosscoder_destroy(_self!);
-      _self = nullptr;
-    }
-  }
-}
-
-// Update FfiRecorder with codec support
 class FfiRecorder implements PlatformRecorder {
   FfiRecorder(Pointer<bindings.Recorder> self) : _self = self;
 
   final Pointer<bindings.Recorder> _self;
   int _channels = 0;
   int _format = 0;
-  RecorderCodecConfig? _codecConfig;
 
   @override
   Future<void> initStream({
@@ -341,11 +175,8 @@ class FfiRecorder implements PlatformRecorder {
     int channels = 1,
     int format = AudioFormat.float32,
     int bufferDurationSeconds = 5,
-    RecorderCodecConfig? codecConfig,
   }) async {
     final cfgPtr = calloc<bindings.RecorderConfig>();
-    final codecCfgPtr =
-        codecConfig != null ? calloc<bindings.RecorderCodecConfig>() : nullptr;
 
     try {
       cfgPtr.ref
@@ -353,17 +184,7 @@ class FfiRecorder implements PlatformRecorder {
         ..channels = channels
         ..formatAsInt = format
         ..bufferDurationSeconds = bufferDurationSeconds
-        ..codecConfig = codecCfgPtr
         ..autoStart = 0;
-
-      if (codecConfig != null) {
-        codecCfgPtr.ref
-          ..codecAsInt = codecConfig.codec.value
-          ..opusApplication = codecConfig.opusApplication
-          ..opusBitrate = codecConfig.opusBitrate
-          ..opusComplexity = codecConfig.opusComplexity
-          ..opusVBR = codecConfig.opusVBR ? 1 : 0;
-      }
 
       final ok = bindings.recorder_init(_self, cfgPtr);
       if (ok != 1) {
@@ -372,106 +193,68 @@ class FfiRecorder implements PlatformRecorder {
 
       _channels = channels;
       _format = format;
-      _codecConfig = codecConfig;
     } finally {
       calloc.free(cfgPtr);
-      if (codecCfgPtr != nullptr) calloc.free(codecCfgPtr);
     }
   }
 
-  @override
-  RecorderCodec get codec => _codecConfig?.codec ?? RecorderCodec.pcm;
-
-  @override
-  Future<bool> updateCodecConfig(RecorderCodecConfig codecConfig) async {
-    final cfgPtr = calloc<bindings.RecorderCodecConfig>();
-    try {
-      cfgPtr.ref
-        ..codecAsInt = codecConfig.codec.value
-        ..opusApplication = codecConfig.opusApplication
-        ..opusBitrate = codecConfig.opusBitrate
-        ..opusComplexity = codecConfig.opusComplexity
-        ..opusVBR = codecConfig.opusVBR ? 1 : 0;
-
-      final ok = bindings.recorder_update_codec_config(_self, cfgPtr);
-      if (ok == 1) {
-        _codecConfig = codecConfig;
-        return true;
-      }
-      return false;
-    } finally {
-      calloc.free(cfgPtr);
+  dynamic _emptyPcm() {
+    switch (_format) {
+      case AudioFormat.int16:
+        return Int16List(0);
+      case AudioFormat.uint8:
+        return Uint8List(0);
+      case AudioFormat.float32:
+      default:
+        return Float32List(0);
     }
   }
 
   @override
   dynamic readChunk({int maxFrames = 512}) {
-    dynamic emptyPcm() {
-      switch (_format) {
-        case AudioFormat.int16:
-          return Int16List(0);
-        case AudioFormat.uint8:
-          return Uint8List(0);
-        case AudioFormat.float32:
-        default:
-          return Float32List(0);
-      }
-    }
-
-    if (_channels == 0)
-      return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
+    if (_channels == 0) return _emptyPcm();
 
     final ptrOut = calloc<Pointer<Void>>();
     final framesOut = calloc<Int>();
     try {
       final ok =
           bindings.recorder_acquire_read_region(_self, ptrOut, framesOut);
-      if (ok == 0)
-        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
+      if (ok == 0) return _emptyPcm();
 
       final available = framesOut.value;
-      if (available <= 0)
-        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
+      if (available <= 0) return _emptyPcm();
 
       final use = available > maxFrames ? maxFrames : available;
       final dataPtr = ptrOut.value;
-      if (dataPtr == nullptr)
-        return codec == RecorderCodec.pcm ? emptyPcm() : Uint8List(0);
+      if (dataPtr == nullptr) return _emptyPcm();
 
       dynamic result;
-      if (codec == RecorderCodec.pcm) {
-        switch (_format) {
-          case AudioFormat.float32:
-            final ptr = dataPtr.cast<Float>();
-            result = Float32List.fromList(
-              ptr.asTypedList(use * _channels),
-            );
-            break;
+      switch (_format) {
+        case AudioFormat.float32:
+          final ptr = dataPtr.cast<Float>();
+          result = Float32List.fromList(
+            ptr.asTypedList(use * _channels),
+          );
+          break;
 
-          case AudioFormat.int16:
-            final ptr = dataPtr.cast<Int16>();
-            result = Int16List.fromList(
-              ptr.asTypedList(use * _channels),
-            );
-            break;
+        case AudioFormat.int16:
+          final ptr = dataPtr.cast<Int16>();
+          result = Int16List.fromList(
+            ptr.asTypedList(use * _channels),
+          );
+          break;
 
-          case AudioFormat.uint8:
-            final ptr = dataPtr.cast<Uint8>();
-            result = Uint8List.fromList(
-              ptr.asTypedList(use * _channels),
-            );
-            break;
+        case AudioFormat.uint8:
+          final ptr = dataPtr.cast<Uint8>();
+          result = Uint8List.fromList(
+            ptr.asTypedList(use * _channels),
+          );
+          break;
 
-          default:
-            throw UnsupportedError(
-              "Unsupported PCM format: $_format",
-            );
-        }
-      } else {
-        // Encoded data - return as Uint8List
-        final bytePtr = dataPtr.cast<Uint8>();
-        result = Uint8List.fromList(
-            bytePtr.asTypedList(use)); // use = bytes in encoded mode
+        default:
+          throw UnsupportedError(
+            "Unsupported PCM format: $_format",
+          );
       }
 
       bindings.recorder_commit_read_frames(_self, use);
@@ -483,9 +266,8 @@ class FfiRecorder implements PlatformRecorder {
   }
 
   @override
-  dynamic getBuffer(int framesToRead) => framesToRead <= 0
-      ? (codec == RecorderCodec.pcm ? Float32List(0) : Uint8List(0))
-      : readChunk(maxFrames: framesToRead);
+  dynamic getBuffer(int framesToRead) =>
+      framesToRead <= 0 ? _emptyPcm() : readChunk(maxFrames: framesToRead);
 
   @override
   void start() {
@@ -837,24 +619,8 @@ final class FfiStreamPlayer implements PlatformStreamPlayer {
       return writeFloat32(data) > 0;
     } else if (data is Int16List) {
       return writeInt16(data) > 0;
-    } else if (data is Uint8List) {
-      return pushEncodedPacket(data);
     }
     return false;
-  }
-
-  @override
-  bool pushEncodedPacket(Uint8List packet) {
-    if (packet.isEmpty) return false;
-    final ptr = calloc<Uint8>(packet.length);
-    try {
-      ptr.asTypedList(packet.length).setAll(0, packet);
-      final ok = bindings.stream_player_push_encoded_packet(
-          _self, ptr.cast(), packet.length);
-      return ok == 1;
-    } finally {
-      calloc.free(ptr);
-    }
   }
 
   @override

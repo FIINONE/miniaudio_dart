@@ -9,8 +9,6 @@
 #else
 #error "miniaudio.h not found"
 #endif
-#include "codec.h"
-#include "crosscoder.h"
 #include "export.h"
 
 #ifdef __cplusplus
@@ -19,33 +17,17 @@ extern "C" {
 
 typedef struct Recorder Recorder;
 
-typedef enum RecorderCodec {
-    RECORDER_CODEC_PCM = 0,  /* Default - raw PCM frames */
-    RECORDER_CODEC_OPUS = 1  /* Opus encoded packets */
-} RecorderCodec;
-
-typedef struct RecorderCodecConfig {
-    RecorderCodec codec;
-    int           opusApplication;  /* OPUS_APPLICATION_AUDIO = 2049 */
-    int           opusBitrate;      /* Target bitrate for Opus */
-    int           opusComplexity;   /* 0-10, default 5 */
-    int           opusVBR;          /* 1 = VBR, 0 = CBR */
-} RecorderCodecConfig;
-
 typedef struct RecorderConfig {
     int                   sampleRate;
     int                   channels;
     ma_format             format;
     int                   bufferDurationSeconds;
-    RecorderCodecConfig*  codecConfig;  /* NULL = PCM default */
     int                   autoStart;
 } RecorderConfig;
 
 EXPORT RecorderConfig recorder_config_default(int sampleRate,
                                               int channels,
                                               ma_format format);
-
-EXPORT RecorderCodecConfig recorder_codec_config_opus_default(void);
 
 EXPORT Recorder* recorder_create(void);
 EXPORT void      recorder_destroy(Recorder* r);
@@ -54,19 +36,13 @@ EXPORT int       recorder_start(Recorder* r);
 EXPORT int       recorder_stop(Recorder* r);
 EXPORT int       recorder_is_recording(const Recorder* r);
 
-/* Unified read API - returns PCM frames or encoded packets based on codec */
+/* Read API - returns PCM frames from the ring buffer */
 EXPORT int recorder_get_available_frames(Recorder* r);
 EXPORT int recorder_acquire_read_region(Recorder* r, void** outPtr, int* outFrames);
 EXPORT int recorder_commit_read_frames(Recorder* r, int frames);
 
 EXPORT void  recorder_set_capture_gain(Recorder* r, float gain);
 EXPORT float recorder_get_capture_gain(Recorder* r);
-
-/* Query codec in use */
-EXPORT RecorderCodec recorder_get_codec(Recorder* r);
-
-/* Dynamic codec configuration changes */
-EXPORT int recorder_update_codec_config(Recorder* r, const RecorderCodecConfig* codecConfig);
 
 /* Device enumeration and selection APIs */
 EXPORT int       recorder_refresh_capture_devices(Recorder* r);

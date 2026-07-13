@@ -35,9 +35,6 @@ abstract class MiniaudioDartPlatformInterface {
     int bufferMs = 240,
   });
 
-  // Add CrossCoder factory method (standalone)
-  PlatformCrossCoder createCrossCoder();
-
   // MP3 encoder factory (standalone, encode-only)
   PlatformMp3Encoder createMp3Encoder();
 }
@@ -80,31 +77,6 @@ abstract interface class PlatformSound {
   bool rebindToEngine(PlatformEngine engine) => false;
 }
 
-// Add codec config classes
-enum RecorderCodec {
-  pcm(0),
-  opus(1);
-
-  const RecorderCodec(this.value);
-  final int value;
-}
-
-class RecorderCodecConfig {
-  final RecorderCodec codec;
-  final int opusApplication;
-  final int opusBitrate;
-  final int opusComplexity;
-  final bool opusVBR;
-
-  const RecorderCodecConfig({
-    required this.codec,
-    this.opusApplication = 2049, // OPUS_APPLICATION_AUDIO
-    this.opusBitrate = 64000,
-    this.opusComplexity = 5,
-    this.opusVBR = true,
-  });
-}
-
 abstract interface class PlatformRecorder {
   factory PlatformRecorder() =>
       MiniaudioDartPlatformInterface.instance.createRecorder();
@@ -114,7 +86,6 @@ abstract interface class PlatformRecorder {
     int channels = 1,
     int format = AudioFormat.float32,
     int bufferDurationSeconds = 5,
-    RecorderCodecConfig? codecConfig, // Add missing parameter
   });
 
   void start();
@@ -122,24 +93,14 @@ abstract interface class PlatformRecorder {
   int getAvailableFrames();
   bool get isRecording;
 
-  /// Unified read API - returns PCM frames or encoded packets based on codec
+  /// Returns interleaved PCM frames (Float32List/Int16List/Uint8List
+  /// depending on the configured format).
   dynamic readChunk({int maxFrames = 512});
   dynamic getBuffer(int framesToRead);
-
-  /// Update codec configuration at runtime
-  Future<bool> updateCodecConfig(RecorderCodecConfig codecConfig);
-
-  /// Get current codec in use
-  RecorderCodec get codec;
 
   /// Capture gain control
   double get captureGain;
   set captureGain(double value);
-
-  // Remove old encoder methods
-  // Future<bool> enableOpusEncoding(...) - REMOVED
-  // int encodedPacketCount() - REMOVED
-  // Uint8List dequeueEncodedPacket(...) - REMOVED
 
   Future<List<(String name, bool isDefault)>> enumerateCaptureDevices();
   Future<bool> selectCaptureDeviceByIndex(int index);
@@ -202,21 +163,6 @@ abstract interface class PlatformGenerator {
   void dispose();
 }
 
-abstract interface class PlatformCrossCoder {
-  factory PlatformCrossCoder() =>
-      MiniaudioDartPlatformInterface.instance.createCrossCoder();
-
-  Future<bool> init(int sampleRate, int channels, int codecId,
-      {int application = 2049});
-  int get frameSize;
-
-  // Update to match C API signature with outBytes
-  (Uint8List packet, int bytesWritten) encodeFrames(Float32List frames);
-  Float32List decodePacket(Uint8List packet);
-
-  void dispose();
-}
-
 abstract interface class PlatformMp3Encoder {
   factory PlatformMp3Encoder() =>
       MiniaudioDartPlatformInterface.instance.createMp3Encoder();
@@ -240,7 +186,7 @@ abstract interface class PlatformMp3Encoder {
   void dispose();
 }
 
-// Streaming playback of raw PCM (Float32 interleaved recommended)
+// Streaming playback of raw PCM (Float32 or Int16 interleaved)
 abstract interface class PlatformStreamPlayer {
   double get volume;
   set volume(double value);
@@ -256,12 +202,8 @@ abstract interface class PlatformStreamPlayer {
   // Write interleaved Int16 samples; returns frames written.
   int writeInt16(Int16List samples);
 
-  // Unified push method - auto-detects and handles any codec
-  bool pushData(
-      dynamic data); // Can be Float32List (PCM) or Uint8List (encoded)
-
-  // Push encoded packets specifically
-  bool pushEncodedPacket(Uint8List packet);
+  // Unified push method - accepts Float32List or Int16List PCM.
+  bool pushData(dynamic data);
 
   void dispose();
 }

@@ -25,13 +25,6 @@ struct StreamPlayer {
     float           volume;
     float           pan;  // Add this: -1.0 (left) to 1.0 (right)
     int             initialized;  // Add initialization flag
-
-    CodecRuntime    codecRT;
-    int             codecInitialized;
-    int             allowCodecPackets;
-
-    float*          decodeBuf;
-    int             decodeBufFrames;
 };
 
 #define SP_CONTAINER_OF(ptr, type, member) ((type*)((char*)(ptr) - offsetof(type, member)))
@@ -101,19 +94,7 @@ StreamPlayerConfig stream_player_config_default(int channels, int sampleRate) {
     cfg.channels           = channels;
     cfg.sampleRate         = sampleRate;
     cfg.bufferMilliseconds = 200;
-    cfg.allowCodecPackets  = 1;
-    cfg.decodeAccumFrames  = 0;
     return cfg;
-}
-
-static int sp_realloc_decode_buf(StreamPlayer* sp, int frames) {
-    if(frames <= sp->decodeBufFrames) return 1;
-    float* nb = (float*)realloc(sp->decodeBuf,
-                      (size_t)frames * sp->channels * sizeof(float));
-    if(!nb) return 0;
-    sp->decodeBuf = nb;
-    sp->decodeBufFrames = frames;
-    return 1;
 }
 
 StreamPlayer* stream_player_alloc(void) {
@@ -128,9 +109,6 @@ StreamPlayer* stream_player_alloc(void) {
 void stream_player_free(StreamPlayer* sp) {
     if(!sp) return;
     stream_player_uninit(sp);
-    if (sp->decodeBuf) {
-        ma_free(sp->decodeBuf, NULL);
-    }
     ma_free(sp, NULL);  // Use ma_free to match ma_malloc
 }
 
@@ -148,7 +126,6 @@ int stream_player_init(StreamPlayer* sp,
     sp->frameSizeBytes = (ma_uint32)(ma_get_bytes_per_sample(sp->format) * sp->channels);
     sp->volume     = 1.0f;
     sp->pan        = 0.0f;  // Add this: centered by default
-    sp->allowCodecPackets = cfg->allowCodecPackets ? 1 : 0;
 
     ma_uint64 capacityFrames = ((ma_uint64)cfg->bufferMilliseconds * sp->sampleRate) / 1000;
     if(capacityFrames < 1024) capacityFrames = 1024;
@@ -183,15 +160,6 @@ int stream_player_init(StreamPlayer* sp,
     ma_sound_set_volume(&sp->sound, sp->volume);
     ma_sound_set_pan(&sp->sound, sp->pan);  // Add this
 
-    CodecConfig ccfg = {
-        .sample_rate     = sp->sampleRate,
-        .channels        = sp->channels,
-        .bits_per_sample = (sp->format == ma_format_s16) ? 16 : 32,
-    };
-    if(codec_runtime_init(&sp->codecRT, CODEC_ID_PCM, &ccfg)) {
-        sp->codecInitialized = 1;
-    }
-
     sp->initialized = 1;  // Mark as initialized
     return 1;
 }
@@ -201,66 +169,28 @@ int stream_player_init_with_engine(StreamPlayer* self,
                                    const StreamPlayerConfig* cfg)
 {
     if (self == NULL || engineWrapper == NULL || cfg == NULL) return 0;
-    
+
     // Cast void* back to Engine* (your wrapper type)
     Engine* engine = (Engine*)engineWrapper;
     ma_engine* mae = engine_get_ma_engine(engine);
     if (mae == NULL) return 0;
-    
+
     // Forward to the standard initializer with individual parameters
     return stream_player_init(self, mae, cfg);
 }
 
 void stream_player_uninit(StreamPlayer* sp) {
     if(!sp || !sp->initialized) return;  // Use initialization flag instead of static guard
-    
+
     if(sp->started) {
         ma_sound_stop(&sp->sound);
         sp->started = 0;
     }
-    if(sp->codecInitialized) {
-        codec_runtime_uninit(&sp->codecRT);
-        sp->codecInitialized = 0;
-    }
     ma_sound_uninit(&sp->sound);
     ma_data_source_uninit((ma_data_source*)&sp->ds.base);
     ma_pcm_rb_uninit(&sp->rb);
-    
+
     sp->initialized = 0;  // Mark as uninitialized
-}
-
-/* Called by codec runtime to deliver decoded PCM. */
-int codec_runtime_on_decoded_frames(CodecRuntime* rt,
-                                    const float* pcm,
-                                    int frames,
-                                    void* userData)
-{
-    (void)rt;
-    StreamPlayer* sp = (StreamPlayer*)userData;
-    if(!sp || frames <= 0 || !pcm) return 0;
-
-    int remaining = frames;
-    int offsetFrames = 0;
-    while(remaining > 0) {
-        ma_uint32 space = ma_pcm_rb_available_write(&sp->rb);
-        if(space == 0) {
-            /* Drop oldest half to make space */
-            ma_uint32 availRead = ma_pcm_rb_available_read(&sp->rb);
-            if(availRead == 0) return 0; /* nothing to drop */
-            ma_pcm_rb_seek_read(&sp->rb, availRead / 2);
-            continue;
-        }
-        ma_uint32 writeNow = (ma_uint32)((remaining < (int)space) ? remaining : (int)space);
-        void* pWrite = NULL;
-        if(ma_pcm_rb_acquire_write(&sp->rb, &writeNow, &pWrite) != MA_SUCCESS || writeNow==0) break;
-        memcpy(pWrite,
-               pcm + offsetFrames * sp->channels,
-               (size_t)writeNow * sp->channels * sizeof(float));
-        ma_pcm_rb_commit_write(&sp->rb, writeNow);
-        remaining     -= (int)writeNow;
-        offsetFrames  += (int)writeNow;
-    }
-    return frames;
 }
 
 int stream_player_start(StreamPlayer* sp) {
@@ -360,31 +290,4 @@ size_t stream_player_write_frames_s16(StreamPlayer* sp,
     }
 
     return stream_player_write_frames(sp, frames, frameCount);
-}
-
-int stream_player_push_encoded_packet(StreamPlayer* sp,
-                                      const void* packet,
-                                      int packetBytes)
-{
-    if(!sp || !packet || packetBytes <= CODEC_FRAME_HEADER_BYTES) return 0;
-    if(!sp->allowCodecPackets) return 0;
-
-    const uint8_t* pkt = (const uint8_t*)packet;
-    CodecID cid = (CodecID)pkt[0];
-
-    if(!sp->codecInitialized || codec_runtime_current_id(&sp->codecRT) != cid) {
-        if(sp->codecInitialized) {
-            codec_runtime_uninit(&sp->codecRT);
-            sp->codecInitialized = 0;
-        }
-        CodecConfig ccfg = {
-            .sample_rate     = sp->sampleRate,
-            .channels        = sp->channels,
-            .bits_per_sample = 32
-        };
-        if(!codec_runtime_init(&sp->codecRT, cid, &ccfg)) return 0;
-        sp->codecInitialized = 1;
-    }
-
-    return codec_runtime_push_packet(&sp->codecRT, pkt, packetBytes, sp);
 }
