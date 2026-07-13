@@ -1,5 +1,6 @@
 #include "../include/mp3_encoder.h"
 
+#include <stdarg.h>
 #include <stdlib.h>
 
 #ifdef HAVE_MP3
@@ -8,6 +9,14 @@
 #else
 #include <lame/lame.h>
 #endif
+
+/* LAME prints internal diagnostics (bit-allocation accounting, "amplification
+   over limits" warnings, etc.) straight to stderr via these callbacks unless
+   overridden. They're harmless encoder chatter, not errors - silence them. */
+static void mp3_encoder_silent_report(const char* format, va_list ap) {
+    (void)format;
+    (void)ap;
+}
 #endif
 
 struct Mp3Encoder {
@@ -36,6 +45,10 @@ int mp3_encoder_init(Mp3Encoder* enc, int sampleRate, int channels, int bitrateK
 
     enc->gfp = lame_init();
     if (!enc->gfp) return 0;
+
+    lame_set_errorf(enc->gfp, mp3_encoder_silent_report);
+    lame_set_debugf(enc->gfp, mp3_encoder_silent_report);
+    lame_set_msgf(enc->gfp, mp3_encoder_silent_report);
 
     lame_set_in_samplerate(enc->gfp, sampleRate);
     lame_set_num_channels(enc->gfp, channels);

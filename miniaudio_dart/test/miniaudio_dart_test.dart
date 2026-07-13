@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -273,6 +274,64 @@ void main() {
       final wrote = sp.writeFloat32(Float32List(480)); // 10ms mono
       expect(wrote, anyOf(0, 480));
       sp.stop();
+    });
+  });
+
+  group('Mp3Encoder', () {
+    late Mp3Encoder encoder;
+
+    setUp(() {
+      encoder = Mp3Encoder();
+    });
+
+    tearDown(() {
+      try {
+        encoder.dispose();
+      } catch (_) {}
+    });
+
+    test('init succeeds for mono 24000Hz', () {
+      encoder.init(sampleRate: 24000, channels: 1, bitrateKbps: 32);
+      expect(encoder.isInit, isTrue);
+    });
+
+    test('encode + flush produces a valid MP3 sync word', () {
+      encoder.init(sampleRate: 24000, channels: 1, bitrateKbps: 32);
+
+      // 1 second of a 440Hz sine tone, 16-bit PCM mono.
+      const sampleRate = 24000;
+      final pcm = Int16List(sampleRate);
+      for (var i = 0; i < sampleRate; i++) {
+        pcm[i] = (8000 * sin(2 * pi * 440.0 * i / sampleRate)).round();
+      }
+
+      final builder = BytesBuilder();
+      // Feed in reasonably small chunks, like a real streaming caller would.
+      const chunkFrames = 1024;
+      for (var offset = 0; offset < pcm.length; offset += chunkFrames) {
+        final end =
+            (offset + chunkFrames < pcm.length) ? offset + chunkFrames : pcm.length;
+        builder.add(encoder.encode(pcm.sublist(offset, end)));
+      }
+      builder.add(encoder.flush());
+
+      final mp3Bytes = builder.toBytes();
+      expect(mp3Bytes, isNotEmpty);
+
+      // MP3 frame sync word: 11 set bits at the start of a frame
+      // (0xFF followed by top 3 bits of the next byte also set).
+      var foundSync = false;
+      for (var i = 0; i < mp3Bytes.length - 1; i++) {
+        if (mp3Bytes[i] == 0xFF && (mp3Bytes[i + 1] & 0xE0) == 0xE0) {
+          foundSync = true;
+          break;
+        }
+      }
+      expect(foundSync, isTrue, reason: 'No MP3 frame sync word found in output');
+    });
+
+    test('rejects use before init', () {
+      expect(() => encoder.encode(Int16List(10)), throwsStateError);
     });
   });
 }
