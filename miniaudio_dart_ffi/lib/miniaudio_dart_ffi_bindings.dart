@@ -5188,3 +5188,43 @@ final class StreamPlayerConfig extends ffi.Struct {
 const int CODEC_VTABLE_VERSION = 1;
 
 const int CODEC_FRAME_HEADER_BYTES = 6;
+
+final class Mp3Encoder extends ffi.Opaque {}
+
+@ffi.Native<ffi.Pointer<Mp3Encoder> Function()>()
+external ffi.Pointer<Mp3Encoder> mp3_encoder_create();
+
+@ffi.Native<ffi.Void Function(ffi.Pointer<Mp3Encoder>)>()
+external void mp3_encoder_destroy(
+  ffi.Pointer<Mp3Encoder> enc,
+);
+
+@ffi.Native<
+    ffi.Int Function(
+        ffi.Pointer<Mp3Encoder>, ffi.Int, ffi.Int, ffi.Int)>()
+external int mp3_encoder_init(
+  ffi.Pointer<Mp3Encoder> enc,
+  int sampleRate,
+  int channels,
+  int bitrateKbps,
+);
+
+@ffi.Native<
+    ffi.Int Function(ffi.Pointer<Mp3Encoder>, ffi.Pointer<ffi.Int16>, ffi.Int,
+        ffi.Pointer<ffi.Uint8>, ffi.Int)>()
+external int mp3_encoder_encode_s16(
+  ffi.Pointer<Mp3Encoder> enc,
+  ffi.Pointer<ffi.Int16> pcm,
+  int frameCount,
+  ffi.Pointer<ffi.Uint8> outBuf,
+  int outCap,
+);
+
+@ffi.Native<
+    ffi.Int Function(
+        ffi.Pointer<Mp3Encoder>, ffi.Pointer<ffi.Uint8>, ffi.Int)>()
+external int mp3_encoder_flush(
+  ffi.Pointer<Mp3Encoder> enc,
+  ffi.Pointer<ffi.Uint8> outBuf,
+  int outCap,
+);

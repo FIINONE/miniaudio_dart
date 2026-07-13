@@ -12,8 +12,10 @@ else()
     set(TARGET_BASENAME miniaudio_dart_web)
 endif()
 
-# Ensure opus.cmake is processed BEFORE source list if you want HAVE_OPUS value early
+# Ensure opus.cmake/mp3.cmake are processed BEFORE source list if you want
+# HAVE_OPUS/HAVE_MP3 values early
 include(cmake/opus.cmake)
+include(cmake/mp3.cmake)
 
 set(MAIN_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/circular_buffer.c"
@@ -29,6 +31,7 @@ set(MAIN_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/codec_runtime.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/codec_pcm.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/crosscoder.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/mp3_encoder.c"
     $<$<BOOL:${HAVE_OPUS}>:${CMAKE_CURRENT_SOURCE_DIR}/src/codec_opus.c>
 )
 
@@ -185,4 +188,34 @@ if(HAVE_OPUS)
     endif()
 else()
     message(STATUS "HAVE_OPUS=0 (Opus disabled or not found)")
+endif()
+
+# Link mp3lame to whichever target name we created
+if(HAVE_MP3)
+    target_link_libraries(${TARGET_BASENAME} PRIVATE mp3::mp3)
+    target_compile_definitions(${TARGET_BASENAME} PRIVATE HAVE_MP3=1)
+
+    get_target_property(_MP3_IFACE_INC mp3::mp3 INTERFACE_INCLUDE_DIRECTORIES)
+    if(_MP3_IFACE_INC)
+        target_include_directories(${TARGET_BASENAME} PRIVATE ${_MP3_IFACE_INC})
+    endif()
+
+    if(DEFINED LAME_INCLUDE_DIR AND EXISTS "${LAME_INCLUDE_DIR}")
+        target_include_directories(${TARGET_BASENAME} PRIVATE "${LAME_INCLUDE_DIR}")
+    endif()
+
+    # Validate header layout (nested "lame/lame.h" from system installs vs
+    # flat "lame.h" from the bundled tarball).
+    set(_MP3_HEADER_NESTED "${LAME_INCLUDE_DIR}/lame/lame.h")
+    set(_MP3_HEADER_FLAT   "${LAME_INCLUDE_DIR}/lame.h")
+    if(EXISTS "${_MP3_HEADER_NESTED}")
+        message(STATUS "LAME header (nested): ${_MP3_HEADER_NESTED}")
+    elseif(EXISTS "${_MP3_HEADER_FLAT}")
+        message(STATUS "LAME header (flat): ${_MP3_HEADER_FLAT}; defining MP3_HEADER_FLAT")
+        target_compile_definitions(${TARGET_BASENAME} PRIVATE MP3_HEADER_FLAT=1)
+    else()
+        message(FATAL_ERROR "Cannot locate lame.h under ${LAME_INCLUDE_DIR}")
+    endif()
+else()
+    message(STATUS "HAVE_MP3=0 (MP3 disabled or not found)")
 endif()

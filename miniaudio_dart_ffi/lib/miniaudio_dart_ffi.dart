@@ -96,6 +96,78 @@ class MiniaudioDartFfi extends MiniaudioDartPlatformInterface {
   PlatformCrossCoder createCrossCoder() {
     return FfiCrossCoder();
   }
+
+  @override
+  PlatformMp3Encoder createMp3Encoder() {
+    final enc = bindings.mp3_encoder_create();
+    if (enc == nullptr) {
+      throw MiniaudioDartPlatformOutOfMemoryException();
+    }
+    return FfiMp3Encoder(enc);
+  }
+}
+
+class FfiMp3Encoder implements PlatformMp3Encoder {
+  FfiMp3Encoder(Pointer<bindings.Mp3Encoder> self) : _self = self;
+
+  final Pointer<bindings.Mp3Encoder> _self;
+  bool _disposed = false;
+
+  // MP3 frames are at most ~1441 bytes; give ourselves a generous margin.
+  static const int _outCap = 1 << 16;
+
+  @override
+  bool init({
+    required int sampleRate,
+    required int channels,
+    int bitrateKbps = 32,
+  }) {
+    return bindings.mp3_encoder_init(_self, sampleRate, channels, bitrateKbps) == 1;
+  }
+
+  @override
+  Uint8List encode(Int16List pcm) {
+    if (pcm.isEmpty) return Uint8List(0);
+
+    final pcmPtr = calloc<Int16>(pcm.length);
+    final outPtr = calloc<Uint8>(_outCap);
+    try {
+      pcmPtr.asTypedList(pcm.length).setAll(0, pcm);
+
+      final written = bindings.mp3_encoder_encode_s16(
+        _self,
+        pcmPtr,
+        pcm.length,
+        outPtr,
+        _outCap,
+      );
+
+      if (written <= 0) return Uint8List(0);
+      return Uint8List.fromList(outPtr.asTypedList(written));
+    } finally {
+      calloc.free(pcmPtr);
+      calloc.free(outPtr);
+    }
+  }
+
+  @override
+  Uint8List flush() {
+    final outPtr = calloc<Uint8>(_outCap);
+    try {
+      final written = bindings.mp3_encoder_flush(_self, outPtr, _outCap);
+      if (written <= 0) return Uint8List(0);
+      return Uint8List.fromList(outPtr.asTypedList(written));
+    } finally {
+      calloc.free(outPtr);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    bindings.mp3_encoder_destroy(_self);
+  }
 }
 
 // Keep standalone CrossCoder implementation

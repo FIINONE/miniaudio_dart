@@ -37,6 +37,9 @@ abstract class MiniaudioDartPlatformInterface {
 
   // Add CrossCoder factory method (standalone)
   PlatformCrossCoder createCrossCoder();
+
+  // MP3 encoder factory (standalone, encode-only)
+  PlatformMp3Encoder createMp3Encoder();
 }
 
 enum EngineState { uninit, init, started }
@@ -210,6 +213,29 @@ abstract interface class PlatformCrossCoder {
   // Update to match C API signature with outBytes
   (Uint8List packet, int bytesWritten) encodeFrames(Float32List frames);
   Float32List decodePacket(Uint8List packet);
+
+  void dispose();
+}
+
+abstract interface class PlatformMp3Encoder {
+  factory PlatformMp3Encoder() =>
+      MiniaudioDartPlatformInterface.instance.createMp3Encoder();
+
+  /// Initialize the encoder. [channels] must be 1 or 2.
+  /// [bitrateKbps]: 16-32 for voice, 64-128 for music.
+  bool init({
+    required int sampleRate,
+    required int channels,
+    int bitrateKbps = 32,
+  });
+
+  /// Encodes interleaved 16-bit PCM samples. Returns encoded MP3 bytes
+  /// (may be empty if LAME buffered the input without producing output yet).
+  Uint8List encode(Int16List pcm);
+
+  /// Flushes any MP3 frames buffered internally by the encoder.
+  /// Call once after the last [encode] call.
+  Uint8List flush();
 
   void dispose();
 }

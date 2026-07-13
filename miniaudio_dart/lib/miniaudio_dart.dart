@@ -604,6 +604,69 @@ final class Converter {
   }
 }
 
+/// Encodes 16-bit PCM audio to MP3 using a bundled libmp3lame — no external
+/// process/binary/network dependency, works fully offline (Windows/macOS).
+final class Mp3Encoder {
+  Mp3Encoder() : _encoder = MiniaudioDartPlatformInterface.instance.createMp3Encoder();
+
+  final PlatformMp3Encoder _encoder;
+
+  bool isInit = false;
+
+  /// [channels] must be 1 (mono) or 2 (stereo).
+  /// [bitrateKbps]: 16-32 for voice, 64-128 for music.
+  void init({
+    required int sampleRate,
+    required int channels,
+    int bitrateKbps = 32,
+  }) {
+    if (isInit) return;
+
+    if (sampleRate <= 0 || channels <= 0 || channels > 2 || bitrateKbps <= 0) {
+      throw ArgumentError("Invalid MP3 encoder parameters");
+    }
+
+    if (!_encoder.init(
+      sampleRate: sampleRate,
+      channels: channels,
+      bitrateKbps: bitrateKbps,
+    )) {
+      throw MiniaudioDartPlatformException("Failed to initialize MP3 encoder.");
+    }
+
+    isInit = true;
+  }
+
+  /// Encodes interleaved 16-bit PCM samples. May return an empty buffer if
+  /// the encoder buffered the input internally without producing output yet
+  /// — this is normal, just keep feeding it more PCM.
+  Uint8List encode(Int16List pcm) {
+    if (!isInit) {
+      throw StateError("Mp3Encoder is not initialized");
+    }
+
+    return _encoder.encode(pcm);
+  }
+
+  /// Flushes any MP3 data buffered internally by the encoder.
+  /// Call once after the last [encode] call, before writing the final file.
+  Uint8List flush() {
+    if (!isInit) {
+      throw StateError("Mp3Encoder is not initialized");
+    }
+
+    return _encoder.flush();
+  }
+
+  void dispose() {
+    if (!isInit) return;
+
+    _encoder.dispose();
+
+    isInit = false;
+  }
+}
+
 /// A generator for waveforms and noise.
 final class Generator {
   Generator({Engine? mainEngine})

@@ -37,6 +37,7 @@ ffigen:
       - "src/include/circular_buffer.h"
       - "src/include/silence_data_source.h"
       - "src/include/stream_player.h"
+      - "src/include/mp3_encoder.h"
     include-directives:
       - "src/include/*.h"
       - "/usr/lib/clang/18/include/stdbool.h"

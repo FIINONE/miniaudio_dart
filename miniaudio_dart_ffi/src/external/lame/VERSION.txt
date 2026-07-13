@@ -1,0 +1,10 @@
+Vendored from LAME 3.100 (https://sourceforge.net/projects/lame/files/lame/3.100/)
+
+Only libmp3lame/ (encoder) and include/lame.h are vendored - the
+frontend/, mpglib decoder, and other unused parts of the LAME
+distribution were stripped out. See COPYING/LICENSE for licensing terms
+(LGPL) and README for upstream project info.
+
+See ../../cmake/mp3.cmake for how this is compiled (no autotools/config.h
+needed - a small set of defines/forced-includes substitute for what an
+autotools-generated config.h would normally provide).
