@@ -50,18 +50,52 @@ if(NOT MP3_FOUND)
 
     # No config.h / autotools: supply the couple of things LAME's headers
     # would otherwise pull from a generated config.h.
+    # STDC_HEADERS: without it, id3tag.c falls into a legacy pre-ANSI-C
+    # branch that #defines strchr/strrchr to index/rindex (old BSD names),
+    # which don't exist on Windows and fail to link.
     target_compile_definitions(mp3lame PRIVATE
         ieee754_float32_t=float
         HAVE_MEMCPY=1
         HAVE_MEMMOVE=1
+        STDC_HEADERS=1
     )
 
     if(MSVC)
-        # MSVC forced includes.
+        # The generated vcxproj for this target doesn't inherit the MSVC/Windows
+        # SDK include paths automatically (unlike the main flutter_assemble
+        # CMake tree), so /FI forced includes below fail to resolve even
+        # stdlib.h/string.h. target_include_directories() alone did NOT fix
+        # this (verified: paths were correct but compile still failed), so
+        # pass them as explicit /I flags instead — bypasses whatever is
+        # dropping the AdditionalIncludeDirectories property for this target.
+        if(DEFINED ENV{INCLUDE})
+            set(_mp3_msvc_sys_includes "$ENV{INCLUDE}")
+            foreach(_mp3_inc_dir IN LISTS _mp3_msvc_sys_includes)
+                if(_mp3_inc_dir)
+                    # Paths like "C:\Program Files\Microsoft Visual Studio\..."
+                    # contain spaces, so the /I value must be quoted or the
+                    # command line splits mid-path and the compiler can't
+                    # find even stdlib.h.
+                    target_compile_options(mp3lame PRIVATE "/I\"${_mp3_inc_dir}\"")
+                endif()
+            endforeach()
+        endif()
+
+        # MSVC forced includes. Each "/FI X" must stay atomic (SHELL: prefix) —
+        # otherwise CMake's option de-duplication (three identical "/FI"
+        # tokens) strips the repeated flag and leaves the orphaned filenames
+        # as bogus extra positional (source file) arguments, which is why
+        # the build was trying to *compile* stdlib.h as a source file.
         target_compile_options(mp3lame PRIVATE
-            /FI stdint.h /FI stdlib.h /FI string.h
+            "SHELL:/FI stdint.h"
+            "SHELL:/FI stdlib.h"
+            "SHELL:/FI string.h"
         )
-        target_compile_definitions(mp3lame PRIVATE _CRT_SECURE_NO_WARNINGS HAVE_CONFIG_H=0)
+        # NOTE: do NOT define HAVE_CONFIG_H=0 — LAME's sources guard the
+        # include with `#ifdef HAVE_CONFIG_H`, which is true for ANY defined
+        # value (including 0), so defining it at all still tries to pull in
+        # a nonexistent generated config.h. Leave it undefined instead.
+        target_compile_definitions(mp3lame PRIVATE _CRT_SECURE_NO_WARNINGS)
     else()
         # NOTE: each "-include X" must stay atomic (SHELL: prefix) -
         # otherwise CMake's option de-duplication strips the repeated
